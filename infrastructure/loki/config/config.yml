@@ -1,0 +1,57 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+# Приём логов
+ingester:
+  lifecycler: # конфигурация жизненного цикла приёмщика логов
+    address: 0.0.0.0
+    ring:
+      kvstore:
+        store: summary # без внешнего хранилища
+      replication_factor: 1 # без репликации
+    final_sleep: 0s
+  chunk_idle_period: 5m # период до выгрузки чанка из оперативной памяти если он простаивает (не дописывается)
+  chunk_retain_period: 30s # время хранения в оперативной памяти заполненных чанков
+  max_transfer_retries: 0 # количество попыток передачи чанков в другой ingester при перебалансировке
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: boltdb
+      object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 168h
+
+storage_config:
+  boltdb:
+    directory: /loki/index # директория для хранения индексов
+  filesystem:
+    directory: /loki/chunks # директория для хранения чанков
+
+limits_config:
+  enforce_metric_name: false
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h # отбрасываются данные старше 7 дней
+  ingestion_rate_mb: 8 # 8 МБ в секунду
+  ingestion_burst_size_mb: 10 # 10 МБ в секунду
+
+chunk_storage_config:
+  max_look_back_period: 0s # без ограничений по времени на поиск в чанках
+
+table_manager:
+  chunk_tables_provisioning: # конфигурация для таблиц чанков
+    inactive_read_throughput: 0 # не выделять ресурсов на чтение из неактивных таблиц.
+    inactive_write_throughput: 0 # не выделять ресурсов на запись неактивных таблиц.
+    provisioned_read_throughput: 0 # гарантированная пропускная способность чтения (не задана, ресурсы выделяются динамически)
+    provisioned_write_throughput: 0 # гарантированная пропускная способность записи (не задана, ресурсы выделяются динамически)
+  index_tables_provisioning: # конфигурация для таблиц индексов
+    inactive_read_throughput: 0
+    inactive_write_throughput: 0
+    provisioned_read_throughput: 0
+    provisioned_write_throughput: 0
+  retention_deletes_enabled: true # удалять старые чанки если срок хранения истёк
+  retention_period: 672h #срок хранения чанков 28 дней
