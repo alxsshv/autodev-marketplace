@@ -1,0 +1,91 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: [ "prometheus:9090" ]
+
+  - job_name: 'host'
+    static_configs:
+      - targets: [ '192.168.0.162:9101' ]
+    scrape_interval: 15s
+
+  - job_name: 'consul'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['consul:8500']  # Адрес и порт Consul HTTP API
+    metrics_path: /v1/agent/metrics
+    scheme: http
+
+  - job_name: 'consul-services'
+    consul_sd_configs:
+      - server: 'consul:8500'  # Адрес сервера Consul
+        services: []  # Мониторинг всех сервисов в Consul
+        tag_separator: ','
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        target_label: service
+      - source_labels: [__meta_consul_tags]
+        target_label: tags
+      - source_labels: [__meta_consul_node]
+        target_label: node
+      - source_labels: [__meta_consul_service_address]
+        regex: '(.+)'
+        target_label: instance
+      - source_labels: [__meta_consul_service_port]
+        regex: '(.+)'
+        target_label: port
+
+  - job_name: "keycloak"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: [ "keycloak:8080" ]
+
+  - job_name: "keycloak-database"
+    static_configs:
+      - targets: [ "keycloak-database-exporter:9187" ]
+
+  - job_name: 'minio'
+    static_configs:
+      - targets: ['minio:9000']
+    metrics_path: "/minio/v2/metrics/cluster"
+
+  - job_name: "redis-cache"
+    static_configs:
+      - targets: [ "redis-exporter:9121" ]
+
+  - job_name: "grafana"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: [ "grafana:3000" ]
+
+  - job_name: "alloy"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: [ "alloy:9080" ]
+
+  - job_name: "loki"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: [ "loki:3100" ]
+
+  - job_name: "tempo"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: [ "tempo:3200" ]
+
+  - job_name: "elasticsearch"
+    static_configs:
+      - targets: [ "elasticsearch-exporter:9114" ]
+
+  - job_name: "api-gateway"
+    metrics_path: "/actuator/metrics"
+    static_configs:
+      - targets: [ "api-gateway:8080" ]
+
+  - job_name: "kafka"
+    static_configs:
+      - targets: [ "kafka-exporter:9308" ]

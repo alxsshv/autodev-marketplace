@@ -1,0 +1,70 @@
+server:
+  port: 8080
+
+---
+spring:
+  application:
+    name: api-gateway
+  config:
+    activate:
+      on-profile: docker
+  cloud:
+    gateway:
+      routes:
+        - id: actuator-route
+          uri: http://localhost:8080  # тот же хост
+          predicates:
+            - Path=/actuator/**
+
+        - id: user-service
+          uri: http://user-service:8080
+          predicates:
+            - Path=/users/**
+          filters:
+            - RewritePath=/users/(?<path>.*), /$\{path}
+
+        - id: auth-service
+          uri: http://auth-service:8080
+          predicates:
+            - Path=/auth/**
+          filters:
+            - RewritePath=/auth/(?<path>.*), /$\{path}
+            - UserHeaderFilter
+
+        - id: catalog-service
+          uri: http://catalog-service:8080
+          predicates:
+            - Path=/catalog/**
+          filters:
+            - RewritePath=/catalog/(?<path>.*), /$\{path}
+
+        - id: listing-service
+          uri: http://listing-service:8080
+          predicates:
+            - Path=/listings/**
+          filters:
+            - RewritePath=/listings/(?<path>.*), /$\{path}
+
+        - id: order-service
+          uri: http://order-service:8080
+          predicates:
+            - Path=/orders/**
+          filters:
+            - RewritePath=/orders/(?path.*), /$\{path}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+      base-path: /actuator  # явное указание базового пути
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+    security:
+      enabled: false  # отключение безопасности для Actuator (для диагностики)
+    server:
+      port: ${server.port}
+
