@@ -70,6 +70,7 @@ java -version
 javac -version
 ```
 5. Gradle wrapper уже включён в проект
+5. Gradle wrapper уже включён в проект
 
 ### Установка Docker и Docker Compose
 
@@ -114,6 +115,23 @@ docker-compose --version
 ```
 
 ## Настройка инфраструктуры
+
+### Названия сервисов и директорий
+
+| Человекочитаемое название | Название сервиса (service name) | Директория |
+|---------------------------|--------------------------------|-----------|
+| API Gateway | api-gateway | services/api-gateway |
+| Auth Service | auth-service | services/auth-service |
+| User Service | user-service | services/user-service |
+| Catalog Service | catalog-service | services/catalog-service |
+| Pricing & Inventory Service | pricing-inventory-service | services/pricing-inventory-service |
+| Search Service | search-service | services/search-service |
+| Order Service | order-service | services/order-service |
+| Notification Service | notification-service | services/notification-service |
+| Review Service | review-service | services/review-service |
+| Recommendation Service | recommendation-service | services/recommendation-service |
+| Admin Service | admin-service | services/admin-service |
+| Analytics & Reporting Service | analytics-service | services/analytics-service |
 
 ### Запуск инфраструктуры через Docker Compose
 

@@ -1,8 +1,8 @@
 # AutoDev Marketplace — System Architecture Overview
 **Распределённая система продажи автозапчастей на стеке Java и Spring Boot**
 
-*Версия документа: 1.0*
-*Дата обновления: 2026-05-27*
+*Версия документа: 1.2*
+*Дата обновления: 2026-06-02*
 
 ---
 
@@ -69,6 +69,36 @@ graph TD
 
 ## 3. Архитектурное представление
 
+### 3.0. Названия сервисов и директорий
+
+| Человекочитаемое название | Название сервиса (service name) | Директория |
+|---------------------------|--------------------------------|-----------|
+| API Gateway | api-gateway | services/api-gateway |
+| Auth Service | auth-service | services/auth-service |
+| User Service | user-service | services/user-service |
+| Catalog Service | catalog-service | services/catalog-service |
+| Pricing Service | pricing-service | services/pricing-service |
+| Inventory Service | inventory-service | services/inventory-service |
+| Search Service | search-service | services/search-service |
+| Order Service | order-service | services/order-service |
+| Payment Service | payment-service | services/payment-service |
+| Logistics Service | logistics-service | services/logistics-service |
+| Returns Service | returns-service | services/returns-service |
+| Notification Service | notification-service | services/notification-service |
+| Messaging Service | messaging-service | services/messaging-service |
+| Moderation Service | moderation-service | services/moderation-service |
+| Marketing Service | marketing-service | services/marketing-service |
+| Reporting Service | reporting-service | services/reporting-service |
+| Analytics Service | analytics-service | services/analytics-service |
+| Admin Service | admin-service | services/admin-service |
+| SellerDashboard Service | seller-dashboard-service | services/seller-dashboard-service |
+| SellerAnalytics Service | seller-analytics-service | services/seller-analytics-service |
+| KnowledgeBase Service | knowledgebase-service | services/knowledgebase-service |
+| PartsCalculator Service | partscalculator-service | services/partscalculator-service |
+| Integration Service | integration-service | services/integration-service |
+| VideoCall Service | videocall-service | services/videocall-service |
+| Media Service | media-service | services/media-service |
+
 ### 3.1. Контейнеры (C4 Level 2)
 
 
@@ -85,23 +115,35 @@ graph TD
         E[Auth Service]
         F[User Service]
         G[Catalog Service]
-        H[Listing Service]
-        I[Search Service]
-        J[Order Service]
-        K[Notification Service]
-        L[Media Service]
-        M[Analytics Service]
-        N[Admin Service]
-        O[Review Service]
-        P[Recommendation Service]
+        H[Pricing Service]
+        I[Inventory Service]
+        J[Search Service]
+        K[Order Service]
+        L[Payment Service]
+        M[Logistics Service]
+        N[Returns Service]
+        O[Notification Service]
+        P[Messaging Service]
+        Q[Moderation Service]
+        R[Marketing Service]
+        S[Reporting Service]
+        T[Analytics Service]
+        U[Admin Service]
+        V[SellerDashboard Service]
+        W[SellerAnalytics Service]
+        X[KnowledgeBase Service]
+        Y[PartsCalculator Service]
+        Z[Integration Service]
+        AA[VideoCall Service]
+        AB[Media Service]
     end
     
     subgraph "Хранилища"
-        Q[PostgreSQL]
-        R[Redis]
-        S[Elasticsearch]
-        T[Kafka]
-        U[MinIO]
+        AC[PostgreSQL]
+        AD[Redis]
+        AE[Elasticsearch]
+        AF[Kafka]
+        AG[MinIO]
     end
     
     A --> D
@@ -120,42 +162,82 @@ graph TD
     D --> N
     D --> O
     D --> P
-    
-    F --> Q
-    G --> Q
-    H --> Q
-    J --> Q
-    M --> Q
-    N --> Q
-    O --> Q
-    P --> Q
-    
-    I --> S
-    K --> R
+    D --> Q
     D --> R
-    E --> R
-    P --> R
+    D --> S
+    D --> T
+    D --> U
+    D --> V
+    D --> W
+    D --> X
+    D --> Y
+    D --> Z
+    D --> AA
+    D --> AB
     
-    F --> T
-    G --> T
-    H --> T
-    J --> T
-    K --> T
-    L --> T
-    M --> T
-    N --> T
-    O --> T
-    P --> T
+    F --> AC
+    G --> AC
+    H --> AC
+    I --> AC
+    K --> AC
+    L --> AC
+    M --> AC
+    N --> AC
+    O --> AC
+    P --> AC
+    Q --> AC
+    R --> AC
+    S --> AC
+    T --> AC
+    U --> AC
+    V --> AC
+    W --> AC
+    X --> AC
+    Y --> AC
+    Z --> AC
+    AA --> AC
+    AB --> AC
     
-    L --> U
+    J --> AE
+    O --> AD
+    P --> AD
+    D --> AD
+    E --> AD
+    V --> AD
+    
+    F --> AF
+    G --> AF
+    H --> AF
+    I --> AF
+    K --> AF
+    L --> AF
+    M --> AF
+    N --> AF
+    O --> AF
+    P --> AF
+    Q --> AF
+    R --> AF
+    S --> AF
+    T --> AF
+    U --> AF
+    V --> AF
+    W --> AF
+    X --> AF
+    Y --> AF
+    Z --> AF
+    AA --> AF
+    AB --> AF
+    
+    P --> AG
+    AB --> AG
     
     classDef client fill:#4CAF50,stroke:#333,stroke-width:1px,color:white;
     classDef service fill:#2196F3,stroke:#333,stroke-width:1px,color:white;
     classDef storage fill:#9C27B0,stroke:#333,stroke-width:1px,color:white;
     
     class A,B,C client
-    class D,E,F,G,H,I,J,K,L,M,N,O,P service
-    class Q,R,S,T,U storage
+    class D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB service
+    class AC,AD,AE,AF,AG storage
 ```
 
 ### 3.2. Компоненты (C4 Level 3)
@@ -174,63 +256,160 @@ graph TD
 - `RoleService` - управление ролями и правами
 
 **User Service:**
-- `UserService` - управление профилями
-- `AuthenticationService` - аутентификация и авторизация
-- `RatingService` - рейтинг пользователей
-- `FavoriteService` - избранное
+- `UserProfileService` - управление профилями пользователей
+- `VerificationService` - верификация пользователей
+- `StoreSettingsService` - настройки магазина продавца
+- `LocalizationService` - мультивалютность и мультиязычность
+- `LoyaltyService` - программа лояльности
+- `FavoriteListService` - управление избранным с папками
+- `SearchHistoryService` - история поиска
+- `ViewHistoryService` - история просмотров
+- `ShoppingCartReminderService` - напоминания о незавершённых покупках
+- `PersonalizedDiscountService` - персонализированные скидки
 
 **Catalog Service:**
 - `ProductCatalogService` - каталог товаров
 - `CategoryService` - категории
+- `VINLookupService` - подбор по VIN
+- `AlternativesService` - каталог аналогов
 - `CompatibilityService` - совместимость по VIN
 - `CrossReferenceService` - кросс-номера
 
-**Pricing & Inventory Service:**
-- `PricingService` - управление ценами
-- `InventoryService` - учёт наличия
+**Pricing Service:**
+- `PriceManagementService` - управление ценами
+- `PriceHistoryService` - история изменения цен
+- `DynamicPricingService` - динамическое ценообразование
+- `PromotionService` - акции и скидки
 - `PriceListImportService` - загрузка прайс-листов
-- `AvailabilityService` - статус наличия
+- `ExternalSystemIntegrationService` - интеграция с 1С, ERP
+
+**Inventory Service:**
+- `AvailabilityService` - учёт наличия товаров
+- `StockStatusService` - статус наличия (в наличии, под заказ, на складе)
+- `InventoryTrackingService` - отслеживание движения товара
+- `StockReservationService` - резервирование наличия при заказе
+
+**Search Service:**
+- `SearchService` - полнотекстовый поиск
+- `FilterService` - фильтрация результатов
+- `AutocompleteService` - автодополнение
+- `RecommendationSearchService` - рекомендательный поиск
 
 **Order Service:**
 - `OrderService` - оформление заказов
 - `CartService` - корзина
-- `PaymentService` - обработка оплаты
-- `EscrowService` - безопасная сделка
+- `BookingService` - бронирование товара
+- `DeliveryService` - выбор способа доставки и календарь
+- `TrackingService` - отслеживание заказа с ТК
+- `DocumentService` - печать документов
+- `DeliveryCostService` - расчёт стоимости доставки
+
+**Payment Service:**
+- `PaymentProcessingService` - обработка оплаты
+- `EscrowService` - безопасная сделка (эскроу)
+- `PaymentMethodService` - управление способами оплаты
+- `PaymentHistoryService` - история платежей
+- `SberbankIntegrationService` - интеграция со Сбербанком
+- `TinkoffIntegrationService` - интеграция с Тинькофф
+
+**Logistics Service:**
+- `DeliveryService` - управление доставкой
+- `TrackingService` - отслеживание заказа с ТК
+- `DeliveryCostService` - расчёт стоимости доставки
+- `DeliveryProviderService` - интеграция с СДЭК, Boxberry, Почта России
+
+**Returns Service:**
+- `ReturnService` - возвраты и гарантия
+- `RefundService` - возврат денежных средств
+- `ReturnReasonService` - причины возврата
+- `WarrantyService` - гарантийное обслуживание
 
 **Notification Service:**
 - `EmailNotificationService` - email уведомления
 - `SmsNotificationService` - SMS уведомления
 - `PushNotificationService` - push уведомления
-- `SubscriptionService` - управление подписками
+- `SubscriptionRuleService` - управление правилами подписок
+- `NotificationPreferenceService` - настройка частоты и типов
 
 **Messaging Service:**
-- `ChatService` - чат между пользователями
-- `MessageService` - хранение сообщений
-- `NotificationService` - уведомления о сообщениях
+- `ChatService` - чат в реальном времени
+- `MessageHistoryService` - хранение истории переписки
+- `FileAttachmentService` - прикрепление файлов
+- `MessageTemplateService` - шаблоны быстрых ответов
+- `VideoCallService` - видеозвонки
 
-**Analytics & Reporting Service:**
-- `SalesAnalyticsService` - аналитика продаж
-- `DashboardService` - дашборды
+**Moderation Service:**
+- `AdModerationService` - модерация объявлений
+- `ReviewModerationService` - модерация отзывов
+- `ContentModerationService` - модерация контента
+- `UserReportingService` - жалобы от пользователей
+
+**Marketing Service:**
+- `TargetedAdvertisingService` - таргетированная реклама
+- `PromotionService` - управление акциями
+- `BannerService` - управление баннерами
+- `MarketingAnalyticsService` - аналитика маркетинга
+
+**Reporting Service:**
 - `ReportService` - генерация отчётов
-- `StatisticsService` - статистика просмотров
+- `ExportService` - экспорт в Excel/PDF
+- `ReportingDashboardService` - дашборд отчётов
+- `CustomReportService` - кастомные отчёты
+
+**Analytics Service:**
+- `PlatformAnalyticsService` - аналитика платформы
+- `CategoryAnalyticsService` - аналитика по категориям
+- `RegionalAnalyticsService` - региональная аналитика
+- `TrendAnalysisService` - анализ трендов
 
 **Admin Service:**
-- `ModerationService` - модерация объявлений
-- `ContentService` - управление контентом
-- `MonitoringService` - мониторинг системы
 - `AuditService` - аудит действий
+- `MonitoringService` - мониторинг системы
+- `SystemConfigurationService` - настройка системы
+- `UserActivityLogService` - журнал действий
 
-**Review Service:**
-- `ReviewService` - управление отзывами
-- `RatingService` - расчёт рейтингов
-- `ReviewValidationService` - валидация отзывов
-- `ReviewModerationService` - модерация отзывов
+**SellerDashboard Service:**
+- `SellerDashboardService` - дашборд продавца
+- `AdPerformanceService` - статистика по объявлениям
+- `SaleAnalyticsService` - аналитика продаж
 
-**Recommendation Service:**
-- `RecommendationEngine` - алгоритмы рекомендаций
-- `CollaborativeFilteringService` - фильтрация по поведению
-- `ContentBasedService` - фильтрация по характеристикам
-- `TrendingService` - популярные товары
+**SellerAnalytics Service:**
+- `SellerPerformanceService` - производительность продавца
+- `AdPerformanceService` - статистика по объявлениям
+- `FinancialAnalyticsService` - финансовая аналитика
+- `ConversionAnalyticsService` - конверсия продавца
+
+**KnowledgeBase Service:**
+- `ArticleService` - статьи и руководства
+- `VideoService` - видеоинструкции
+- `FAQService` - часто задаваемые вопросы
+- `KnowledgeSearchService` - поиск в базе знаний
+
+**PartsCalculator Service:**
+- `VINCalculatorService` - калькулятор подбора по VIN
+- `ComponentCalculatorService` - расчёт количества расходников
+- `MaintenanceCalculatorService` - подбор комплекта для ТО
+- `SeasonalCalculatorService` - рекомендации по сезонной замене
+
+**Integration Service:**
+- `TecDocIntegrationService` - интеграция с TecDoc
+- `1CIntegrationService` - интеграция с 1С
+- `ERPIntegrationService` - интеграция с ERP
+- `Bitrix24IntegrationService` - интеграция с Bitrix24
+- `WebhookService` - веб-хуки
+- `APIPartnerService` - API для партнёров
+
+**VideoCall Service:**
+- `VideoCallService` - видеозвонки
+- `CallHistoryService` - история видеозвонков
+- `CallRecordingService` - запись видеозвонков
+
+**Media Service:**
+- `MediaStorageService` - хранение медиафайлов (изображения, видео)
+- `MediaProcessingService` - обработка медиафайлов
+- `ImageOptimizationService` - оптимизация изображений
+- `VideoTranscodingService` - транскодирование видео
+
 
 ---
 
@@ -274,52 +453,79 @@ graph TD
 ### API Gateway
 Реализует единую точку входа для всех клиентов. Выполняет маршрутизацию запросов к соответствующим микросервисам, аутентификацию через JWT, ограничение частоты запросов (rate limiting) и управление политиками CORS. Использует Spring Cloud Gateway с интеграцией в Keycloak для проверки токенов.
 
-
 ### Auth Service
 Обеспечивает централизованную аутентификацию и авторизацию через Keycloak. Реализует OAuth2/OpenID Connect протоколы, управление пользователями, ролями и правами доступа. Генерирует JWT-токены с информацией о пользователе и его ролях для использования в других сервисах.
 
-
 ### User Service
-Отвечает за управление пользователями, аутентификацию, авторизацию и профили. Реализует RBAC (Role-Based Access Control) с ролями BUYER, SELLER, MODERATOR, ADMIN. Хранит персональную информацию пользователей с шифрованием чувствительных данных.
+Отвечает за управление пользователями, аутентификацию, авторизацию, профили, верификацию, настройки магазина, мультивалютность и мультиязычность. Реализует RBAC (Role-Based Access Control) с ролями BUYER, SELLER, MODERATOR, ADMIN. Хранит персональную информацию пользователей с шифрованием чувствительных данных. Поддерживает программу лояльности с накоплением баллов, историю поиска и просмотров, избранное с папками по категориям и персонализированные рекомендации и скидки.
 
+### Catalog Service
+Предоставляет расширенный функционал каталога товаров с подбором по VIN, каталогом аналогов. Управляет категориями, характеристиками и совместимостью запчастей. Интегрируется с внешними каталогами (TecDoc) для получения данных о совместимости автомобилей.
 
-### Product Catalog Service
-Предоставляет функционал каталога товаров с поиском по VIN, марке/модели, артикулу. Управляет категориями, характеристиками и совместимостью запчастей. Интегрируется с внешними каталогами (TecDoc) для получения данных о совместимости автомобилей.
+### Pricing Service
+Обеспечивает управление ценами, историю изменения цен и динамическое ценообразование. Поддерживает загрузку прайс-листов в форматах CSV, XLSX, XML, YML. Интегрируется с системами учёта продавцов (1С, ERP) через веб-хуки и автоматическую загрузку.
 
+### Inventory Service
+Обеспечивает учёт наличия товаров, статус наличия (в наличии, под заказ, на складе) и отслеживание движения товара. Реализует механизм резервирования наличия при заказе для обеспечения согласованности данных.
 
-### Pricing & Inventory Service
-Обеспечивает управление ценами и учётом наличия. Поддерживает массовую загрузку прайс-листов в форматах CSV, XLSX, XML, YML. Реализует механизм сопоставления полей файла с полями системы и различные режимы обработки (полная замена, добавление, обновление). Интегрируется с системами учёта продавцов.
-
+### Search Service
+Предоставляет полнотекстовый поиск с расширенной фильтрацией по цене, состоянию, наличию, региону продавца, рейтингу, сроку доставки и другим критериям. Реализует автодополнение и рекомендательный поиск на основе истории пользователя.
 
 ### Order Service
-Реализует процесс оформления заказов с корзиной, безопасной сделкой (эскроу) и управлением статусами. Использует Saga Pattern для координации распределённых транзакций между сервисами. Обеспечивает согласованность данных при изменении статусов заказа.
+Реализует процесс оформления заказов с корзиной, безопасной сделкой (эскроу) и управлением статусами. Поддерживает бронирование товара с резервированием наличия, выбор способов доставки с календарем (выбор даты/времени), отслеживание статуса заказа с интеграцией транспортных компаний. Использует Saga Pattern для координации распределённых транзакций между сервисами.
 
+**Статусы заказа:** Ожидает подтверждения, В обработке, Отправлен, Доставляется, Готов к получению, Завершён, Отменён, Возврат.
+
+### Payment Service
+Обеспечивает обработку оплаты через онлайн-оплату картой (3DSecure), безопасную сделку (эскроу), наличные при получении и банковский перевод. Интегрируется с платёжными системами Сбербанк и Тинькофф для обеспечения надёжных платежей.
+
+### Logistics Service
+Управляет доставкой, отслеживанием заказов с ТК и расчётом стоимости доставки по регионам. Интегрируется с службами доставки СДЭК, Boxberry, Почта России для автоматизации логистических процессов.
+
+### Returns Service
+Обеспечивает обработку возвратов и гарантийных случаев. Реализует механизм возврата денежных средств, фиксацию причин возврата и обслуживание гарантийных обязательств.
 
 ### Notification Service
-Обеспечивает отправку уведомлений через email, SMS и push. Поддерживает подписки на события (снижение цены, статус заказа). Реализует асинхронную отправку уведомлений через Kafka для обеспечения надёжности доставки.
-
+Обеспечивает отправку уведомлений через email, SMS и push. Поддерживает персонализированные подписки на события (снижение цены, статус заказа, появление редких запчастей, новые объявления по заданным критериям). Реализует асинхронную отправку уведомлений через Kafka для обеспечения надёжности доставки и настройку частоты и типов уведомлений.
 
 ### Messaging Service
-Предоставляет функционал внутреннего чата между покупателями и продавцами. Включает историю переписки, уведомления о новых сообщениях и возможность прикрепления файлов. Поддерживает WebSocket для реального времени обмена сообщениями.
+Предоставляет функционал внутреннего чата между покупателями и продавцами. Включает историю переписки, возможность прикрепления файлов, шаблоны быстрых ответов, видеозвонки и уведомления о новых сообщениях. Поддерживает WebSocket для реального времени обмена сообщениями.
 
+### Moderation Service
+Обеспечивает модерацию контента. Включает модерацию объявлений и отзывов, модерацию контента и приём жалоб от пользователей. Автоматизирует проверку на соответствие правилам и позволяет модераторам принимать решения о публикации/удалении контента.
 
-### Analytics & Reporting Service
-Собирает и анализирует данные о продажах, просмотрах и поведении пользователей. Предоставляет дашборды и отчёты для продавцов и администраторов. Реализует агрегацию данных из различных источников для формирования бизнес-метрик.
+### Marketing Service
+Реализует таргетированную рекламу для продавцов, управление акциями и баннерами. Обеспечивает аналитику маркетинговых кампаний и продвижение товаров на платформе.
 
+### Reporting Service
+Генерирует отчёты и обеспечивает экспорт данных в Excel/PDF. Предоставляет дашборд отчётов и поддерживает кастомные отчёты для удовлетворения специфических бизнес-потребностей.
+
+### Analytics Service
+Обеспечивает аналитику платформы. Включает аналитику по категориям, региональную аналитику и анализ трендов для принятия управленческих решений.
 
 ### Admin Service
-Обеспечивает модерацию контента, мониторинг системы и административные функции. Включает инструменты для проверки объявлений на соответствие правилам, блокировки нарушителей и аналитики платформы. Предоставляет интерфейс для управления системой администраторам.
+Обеспечивает аудит действий, мониторинг системы и настройку конфигурации. Хранит журнал действий пользователей для обеспечения прозрачности и безопасности системы.
 
+### SellerDashboard Service
+Предоставляет личный кабинет продавца с дашбордом, отображающим ключевые метрики: количество просмотров объявлений, число контактов от покупателей, динамику продаж, рейтинг продавца. Включает статистику по объявлениям и аналитику продаж.
 
-### Review Service
-Обеспечивает управление отзывами и рейтингами. Позволяет пользователям оставлять отзывы с фото/видео, оценивать товары и продавцов по 5-балльной шкале. Реализует систему модерации отзывов и расчёт рейтингов на основе количества сделок, оценок, скорости ответов и соблюдения условий сделки. Интегрируется с Media Service для хранения медиафайлов отзывов.
+### SellerAnalytics Service
+Обеспечивает аналитику для продавцов. Включает производительность продавца, статистику по объявлениям, финансовую аналитику и конверсию продавца для оптимизации бизнес-процессов.
 
+### KnowledgeBase Service
+Предоставляет базу знаний со статьями и руководствами по подбору запчастей, видеоинструкциями по установке, часто задаваемыми вопросами и поиском в базе знаний для самостоятельного решения проблем.
 
-### Recommendation Service
-Предоставляет персонализированные рекомендации на основе поведения пользователя. Реализует алгоритмы коллаборативной фильтрации, контент-базированной фильтрации и анализа трендов. Формирует рекомендации "Вам может понравиться", "Часто покупают вместе" и "Похожие товары". Использует данные из Analytics Service и Catalog Service для формирования рекомендаций.
+### PartsCalculator Service
+Реализует калькулятор подбора запчастей по VIN, расчёт количества расходников по пробегу, подбор комплекта для ТО и рекомендации по сезонной замене для оптимизации подбора запчастей.
 
+### Integration Service
+Обеспечивает интеграцию с внешними системами: TecDoc, 1С, ERP, Bitrix24. Реализует веб-хуки и API для партнёров для автоматизации обмена данными и синхронизации информации.
 
----
+### VideoCall Service
+Предоставляет видеозвонки между покупателями и продавцами для детального осмотра товара, хранение истории видеозвонков и запись видеозвонков для последующего просмотра.
+
+### Media Service
+Обеспечивает хранение и управление медиафайлами (изображения, видео) для товаров, отзывов и объявлений. Поддерживает загрузку, обработку, оптимизацию изображений и транскодирование видео для эффективной доставки медиа-контента.
 
 
 ## 6. Нефункциональные требования (NFR)
@@ -342,17 +548,35 @@ graph TD
 
 ### Основные сущности
 - `User`: пользователи системы
+- `Seller`: продавцы и их профили
 - `Product`: товарные позиции
 - `Category`: категории товаров
 - `Order`: заказы
-- `PriceList`: прайс-лист
+- `Review`: отзывы и рейтинги
+- `Message`: сообщения и переписка
+- `Comparison`: сравнение товаров
+- `Media`: медиафайлы (изображения, видео)
+- `Notification`: уведомления и подписки
+- `Inventory`: учёт наличия товаров
+- `Pricing`: информация о ценах
+- `Delivery`: информация о доставке
+- `Return`: возвраты и гарантия
+- `SearchHistory`: история поиска
+- `ViewHistory`: история просмотров
+- `FavoriteItem`: избранные товары
+- `Promotion`: акции и скидки
+- `Ad`: объявления продавцов
+- `KnowledgeArticle`: статьи базы знаний
+- `VideoCall`: информация о видеозвонках
+- `IntegrationLog`: логи интеграции с внешними системами
+- `AuditLog`: аудитные записи действий
 
 ## 8. Технологический стек
 
 ### Бэкенд
 - **Java**: 17 (LTS версия) - основной язык разработки
 - **Spring Boot**: 3.4.5 - фреймворк для создания микросервисов
-- **Spring Cloud**: 2023.0.1 - интеграция микросервисов, Service Discovery, Circuit Breaker
+- **Spring Cloud**: 2024.0.0 - интеграция микросервисов, Service Discovery, Circuit Breaker
 - **Spring Data JPA**: 3.4.5 - доступ к данным в реляционных базах данных
 - **Spring Security**: 6.4.5 - аутентификация и авторизация
 - **Spring Cloud Gateway**: 4.4.5 - API Gateway для маршрутизации запросов

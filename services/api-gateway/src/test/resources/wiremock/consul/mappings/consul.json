@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "/v1/catalog/services?wait=2s&token="
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "consul": [],
+      "auth-service": ["auth-service-1"],
+      "user-service": ["user-service-1"],
+      "catalog-service": ["catalog-service-1"],
+      "pricing-inventory-service": ["pricing-inventory-service-1"],
+      "search-service": ["search-service-1"],
+      "order-service": ["order-service-1"],
+      "notification-service": ["notification-service-1"],
+      "review-service": ["review-service-1"],
+      "recommendation-service": ["recommendation-service-1"],
+      "admin-service": ["admin-service-1"],
+      "analytics-service": ["analytics-service-1"]
+    }
+  }
+}

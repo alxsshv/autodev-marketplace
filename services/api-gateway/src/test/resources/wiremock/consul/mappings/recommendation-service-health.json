@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/v1/health/service/recommendation-service.*"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": [
+      {
+        "Node": {
+          "Address": "127.0.0.1"
+        },
+        "Service": {
+          "ID": "recommendation-service-1",
+          "Service": "recommendation-service",
+          "Port": 8290
+        },
+        "Checks": [
+          {
+            "CheckID": "service:recommendation-service-1",
+            "Status": "passing"
+          }
+        ]
+      }
+    ],
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}
