@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/v1/health/service/analytics-service.*"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": [
+      {
+        "Node": {
+          "Address": "127.0.0.1"
+        },
+        "Service": {
+          "ID": "analytics-service-1",
+          "Service": "analytics-service",
+          "Port": 8292
+        },
+        "Checks": [
+          {
+            "CheckID": "service:analytics-service-1",
+            "Status": "passing"
+          }
+        ]
+      }
+    ],
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

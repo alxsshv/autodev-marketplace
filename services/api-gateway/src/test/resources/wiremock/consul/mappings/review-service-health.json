@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/v1/health/service/review-service.*"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": [
+      {
+        "Node": {
+          "Address": "127.0.0.1"
+        },
+        "Service": {
+          "ID": "review-service-1",
+          "Service": "review-service",
+          "Port": 8289
+        },
+        "Checks": [
+          {
+            "CheckID": "service:review-service-1",
+            "Status": "passing"
+          }
+        ]
+      }
+    ],
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}
