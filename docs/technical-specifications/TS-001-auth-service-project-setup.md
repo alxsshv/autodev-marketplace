@@ -1,392 +1,222 @@
-# Техническое задание TS-001: Подготовка проекта Auth Service
+# Техническое задание TS-001: Создание проекта Auth Service
 
 **Версия документа:** 1.0  
 **Дата создания:** 2026-06-02  
-**Автор:** Аналитик  
+**Автор:** Системный аналитик  
 **Статус:** Готово к реализации  
 **Приоритет:** Высокий  
 **Оценка трудоемкости:** 2 дня
 
 ---
 
-## 1. Введение
+## 1. Цель проекта
 
-### 1.1 Цель документа
-Настоящее техническое задание описывает подготовку структуры проекта и конфигурацию Spring Boot приложения для микросервиса Auth Service, который будет обеспечивать централизованную аутентификацию и авторизацию пользователей через интеграцию с Keycloak.
-
-### 1.2 Область применения
-Техническое задание предназначено для Java backend разработчика, который будет создавать и настраивать проект Auth Service в соответствии с требованиями.
-
-### 1.3 Ссылки
-- [docs/tasks/third-task.md](../tasks/third-task.md) - Основная задача
-- [docs/architecture/system-overview.md](../architecture/system-overview.md) - Архитектура системы
+Создать микросервис Auth Service для централизованной аутентификации и авторизации пользователей через интеграцию с Keycloak.
 
 ---
 
-## 2. Общие требования
+## 2. Функциональные требования
 
-### 2.1 Цель проекта
-Создать микросервис Auth Service с нуля по стандартной структуре Spring Boot 3.4.5 с использованием Java 17.
+### FR-1. Структура проекта
 
-### 2.2 Функциональные требования
-- [ ] Проект должен создаваться по стандартной структуре Spring Boot
-- [ ] Все зависимости должны быть корректно настроены в build.gradle.kts
-- [ ] Основной класс приложения должен содержать все необходимые аннотации
-- [ ] Конфигурация должна поддерживать локальный и docker режимы работы
+**FR-1.1.** Создать директорию `services/auth-service` со стандартной структурой Spring Boot проекта.
 
-### 2.3 Нефункциональные требования
-- **Производительность:** Запуск проекта не должен превышать 60 секунд
-- **Совместимость:** Все зависимости должны быть совместимы между собой
-- **Документация:** Код должен быть сопровожден JavaDoc комментариями
+**FR-1.2.** Внутри `services/auth-service` создать следующие директории:
+- `src/main/java/com/autodev/auth/` — основной исходный код
+- `src/main/resources/` — ресурсы (конфигурация, миграции)
+- `src/test/java/com/autodev/auth/` — тесты
+- `src/main/resources/db/changelog/` — файлы миграций Liquibase
 
----
+### FR-2. Конфигурация сборки
 
-## 3. Требования к проекту
+**FR-2.1.** В `build.gradle.kts` настроить зависимости для:
+- Spring Boot 3.4.5 с поддержкой Java 17
+- Spring Cloud Consul для Service Discovery
+- Spring Security с OAuth2 Resource Server
+- Spring Data JPA для доступа к PostgreSQL
+- Spring Data Redis для кэширования
+- Spring Kafka для асинхронной коммуникации
+- Liquibase для управления миграциями БД
+- MapStruct для маппинга объектов
+- Lombok для сокращения boilerplate кода
+- Testcontainers для интеграционного тестирования
 
-### 3.1 Структура проекта
+**FR-2.2.** Настроить плагины:
+- `org.springframework.boot`
+- `io.spring.dependency-management`
+- `org.liquibase.gradle`
 
-#### 3.1.1 Директории
-```
-services/
-└── auth-service/
-    ├── src/
-    │   ├── main/
-    │   │   ├── java/com/autodev/auth/
-    │   │   │   ├── AuthApplication.java
-    │   │   │   ├── config/
-    │   │   │   ├── controller/
-    │   │   │   ├── dto/
-    │   │   │   ├── entity/
-    │   │   │   ├── repository/
-    │   │   │   ├── service/
-    │   │   │   └── event/
-    │   │   └── resources/
-    │   │       ├── application.yml
-    │   │       ├── application-docker.yml
-    │   │       └── db/
-    │   │           └── changelog/
-    │   └── test/
-    │       └── java/com/autodev/auth/
-    ├── build.gradle.kts
-    ├── Dockerfile
-    └── README.md
-```
-
-#### 3.1.2 Описание директорий
-- `src/main/java/com/autodev/auth/` - основной исходный код
-- `src/main/resources/` - ресурсы (конфигурация, миграции)
-- `src/test/java/com/autodev/auth/` - тесты
-- `build.gradle.kts` - конфигурация сборки
-- `Dockerfile` - Dockerfile для контейнеризации
-
-### 3.2 Build Configuration
-
-#### 3.2.1 Зависимости
-В `build.gradle.kts` должны быть указаны следующие зависимости:
-
-```kotlin
-dependencies {
-    // Spring Boot Starters
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.springframework.boot:spring-boot-starter-security")
-    implementation("org.springframework.boot:spring-boot-starter-cache")
-    implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springframework.boot:spring-boot-starter-validation")
-    
-    // Spring Cloud
-    implementation("org.springframework.cloud:spring-cloud-starter-consul-discovery")
-    implementation("org.springframework.cloud:spring-cloud-starter-security")
-    
-    // Database
-    runtimeOnly("org.postgresql:postgresql")
-    
-    // Caching
-    implementation("org.springframework.boot:spring-boot-starter-data-redis")
-    
-    // Messaging
-    implementation("org.springframework.kafka:spring-kafka")
-    
-    // Liquibase
-    implementation("org.liquibase:liquibase-core")
-    
-    // MapStruct
-    implementation("org.mapstruct:mapstruct")
-    annotationProcessor("org.mapstruct:mapstruct-processor")
-    
-    // Lombok
-    compileOnly("org.projectlombok:lombok")
-    annotationProcessor("org.projectlombok:lombok")
-    
-    // Test dependencies
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.springframework.kafka:spring-kafka-test")
-    testImplementation("org.testcontainers:testcontainers")
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.testcontainers:postgresql")
-    testImplementation("org.testcontainers:kafka")
-}
-```
-
-#### 3.2.2 Плагины
-```kotlin
-plugins {
-    java
-    id("org.springframework.boot") version "3.4.5"
-    id("io.spring.dependency-management") version "1.1.7"
-    id("org.liquibase.gradle") version "2.2.1"
-}
-```
-
-#### 3.2.3 Версии библиотек
-Используются версии из `gradle.properties`:
+**FR-2.3.** Использовать версии библиотек из `gradle.properties` проекта:
 - `springBootVersion=3.4.5`
 - `springCloudVersion=2024.0.1`
 
-### 3.3 Main Application Class
+### FR-3. Основной класс приложения
 
-#### 3.3.1 AuthApplication.java
-Создать файл `src/main/java/com/autodev/auth/AuthApplication.java`:
+**FR-3.1.** Создать класс `AuthApplication` в пакете `com.autodev.auth`.
 
-```java
-package com.autodev.auth;
+**FR-3.2.** Добавить аннотации:
+- `@SpringBootApplication` — основная аннотация Spring Boot
+- `@EnableDiscoveryClient` — включить регистрацию в Consul
+- `@EnableCaching` — включить кэширование
+- `@EnableKafka` — включить Kafka
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
-import org.springframework.kafka.annotation.EnableKafka;
+### FR-4. Конфигурация приложения
 
-/**
- * Главный класс приложения Auth Service.
- * 
- * @author AutoDev Team
- */
-@SpringBootApplication
-@EnableDiscoveryClient
-@EnableCaching
-@EnableKafka
-public class AuthApplication {
-    
-    public static void main(String[] args) {
-        SpringApplication.run(AuthApplication.class, args);
-    }
-}
-```
+**FR-4.1.** В `application.yml` настроить:
+- Порт сервера: 8080
+- Имя сервиса: `auth-service`
+- Активный профиль по умолчанию: `local`
 
-### 3.4 Конфигурация приложения
+**FR-4.2.** Настроить подключение к базе данных PostgreSQL:
+- Драйвер: `org.postgresql.Driver`
+- URL, username и password из переменных окружения
 
-#### 3.4.1 application.yml
-Создать файл `src/main/resources/application.yml`:
+**FR-4.3.** Настроить подключение к Redis:
+- Host и port из переменных окружения
+- Password из переменной окружения
 
-```yaml
-server:
-  port: 8080
+**FR-4.4.** Настроить Kafka:
+- Bootstrap servers из переменной окружения
+- Конфигурация producer и consumer для JSON сериализации
 
-spring:
-  application:
-    name: auth-service
-  
-  profiles:
-    active: local
-  
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: none
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
-        enable_lazy_load_no_trans: true
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
-  
-  datasource:
-    driver-class-name: org.postgresql.Driver
-  
-  data:
-    redis:
-      host: ${REDIS_HOST:redis}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD}
-  
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.trusted.packages: com.autodev.auth.event
-    consumer:
-      group-id: auth-service-group
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: com.autodev.auth.event
-        spring.json.value.default.type: com.autodev.auth.event.UserCreatedEvent
+**FR-4.5.** Настроить интеграцию с Keycloak:
+- `issuer-uri` для валидации JWT токенов
 
-  liquibase:
-    enabled: true
-    change-log: classpath:db/changelog/db.changelog-master.yaml
-  
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/autodev}
+**FR-4.6.** Настроить Consul:
+- Host и port для Service Discovery
+- Настройки health check и регистрации
 
-consul:
-  host: ${CONSUL_HOST:consul}
-  port: ${CONSUL_PORT:8500}
-  discovery:
-    enabled: true
-    instance-id: ${spring.application.name}:${random.value}
-    service-name: ${spring.application.name}
-    health-check-path: /actuator/health
-    health-check-interval: 10s
-    register: true
-    prefer-ip-address: false
+**FR-4.7.** Настроить Actuator:
+- Экспонировать эндпоинты: `health`, `info`, `metrics`, `env`, `configprops`
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,env,configprops
-  endpoint:
-    health:
-      show-details: always
-      probes:
-        enabled: true
+### FR-5. Профили окружения
 
-logging:
-  level:
-    root: INFO
-    com.autodev.auth: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-```
+**FR-5.1.** Создать профиль `docker` в `application-docker.yml` для работы в контейнере.
 
-#### 3.4.2 application-docker.yml
-Создать файл `src/main/resources/application-docker.yml`:
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:postgresql://${DB_HOST:auth-database}:${DB_PORT:5432}/${DB_NAME:auth}
-    username: ${DB_USER:auth_user}
-    password: ${DB_PASSWORD:auth_password}
-  
-  redis:
-    host: ${REDIS_HOST:redis}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD}
-  
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
-  
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/autodev}
-
-consul:
-  host: ${CONSUL_HOST:consul}
-  port: ${CONSUL_PORT:8500}
-
-server:
-  port: 8080
-```
-
-### 3.5 Дополнительные требования
-
-#### 3.5.1 Папка для миграций
-Создать структуру папок:
-```
-src/main/resources/db/changelog/
-```
-
-#### 3.5.2 Структура Java пакетов
-```
-com.autodev.auth
-├── AuthApplication.java
-├── config/              # Конфигурационные классы
-├── controller/          # REST контроллеры
-├── dto/                 # DTO классы
-├── entity/              # JPA сущности
-├── repository/          # Репозитории
-├── service/             # Сервисы
-└── event/               # Классы событий для Kafka
-```
+**FR-5.2.** В профиле `docker` указать:
+- Правильные имена сервисов (auth-database, redis, kafka, consul)
+- Использовать Docker сетевые имена вместо localhost
 
 ---
 
-## 4. Требования к коду
+## 3. Нефункциональные требования
 
-### 4.1 Стандарты кодирования
-- Использовать Java 17
-- Соблюдать принятые в проекте соглашения об именовании
-- Добавлять JavaDoc ко всем публичным классам и методам
-- Использовать аннотации Lombok для сокращения boilerplate кода
+**NFR-1.** Время запуска приложения не должно превышать 60 секунд.
 
-### 4.2 Именование
-- Классы: UpperCamelCase (AuthApplication, UserService)
-- Методы: lowerCamelCase (findByEmail, getAllUsers)
-- Константы: UPPER_SNAKE_CASE (MAX_LENGTH)
-- Пакеты: lower snake case (com.autodev.auth)
+**NFR-2.** Все зависимости в `build.gradle.kts` должны быть совместимы между собой.
 
-### 4.3 Версионирование
-- Использовать Git для управления версиями
-- Коммиты должны следовать Conventional Commits
+**NFR-3.** Проект должен компилироваться командой `./gradlew build` без ошибок.
+
+**NFR-4.** Приложение должно запускаться командой `./gradlew bootRun` без ошибок.
+
+**NFR-5.** Код должен соответствовать конвенциям именования Java проекта (UpperCamelCase для классов, lowerCamelCase для методов).
+
+**NFR-6.** Все публичные классы и методы должны быть задокументированы через JavaDoc.
 
 ---
 
-## 5. Критерии приемки
+## 4. Технические требования
 
-- [ ] Проект создается по стандартной структуре Spring Boot
-- [ ] `build.gradle.kts` содержит все необходимые зависимости с правильными версиями
-- [ ] Основной класс приложения содержит все необходимые аннотации
-- [ ] `application.yml` настроен для локальной разработки
-- [ ] `application-docker.yml` настроен для работы в Docker
-- [ ] Структура папок соответствует требованиям
-- [ ] Проект компилируется без ошибок: `./gradlew build`
-- [ ] Проект запускается без ошибок: `./gradlew bootRun`
+### 4.1. Технологический стек
 
----
+**Backend:**
+- Java 17 (LTS)
+- Spring Boot 3.4.5
+- Spring Cloud 2024.0.1
 
-## 6. Риски
+**Базы данных:**
+- PostgreSQL 15 — основная БД для хранения пользователей
+- Redis 7 — кэширование данных
+- Liquibase 4.27.0 — миграции БД
 
-| Риск | Влияние | Вероятность | Митигация |
-|------|---------|-------------|-----------|
-| Неправильные версии зависимостей | Высокое | Средняя | Использовать версии из gradle.properties |
-| Неправильная структура проекта | Среднее | Средняя | Следовать стандартам проекта |
-| Проблемы с компиляцией | Высокое | Низкая | Проверять совместимость зависимостей |
+**Инфраструктура:**
+- Consul 1.15.3 — Service Discovery
+- Kafka 4.2.0 — асинхронная коммуникация
 
----
+### 4.2. Структура проекта
 
-## 7. Приложения
-
-### 7.1 Проверка компиляции
-После создания проекта выполнить:
-```bash
-cd services/auth-service
-./gradlew build
+```
+services/auth-service/
+├── src/
+│   ├── main/
+│   │   ├── java/com/autodev/auth/
+│   │   │   ├── AuthApplication.java
+│   │   │   ├── config/           # Конфигурационные классы
+│   │   │   ├── controller/       # REST контроллеры
+│   │   │   ├── dto/              # DTO объекты
+│   │   │   ├── entity/           # JPA сущности
+│   │   │   ├── repository/       # Репозитории
+│   │   │   ├── service/          # Сервисы
+│   │   │   └── event/            # Классы событий для Kafka
+│   │   └── resources/
+│   │       ├── application.yml
+│   │       ├── application-docker.yml
+│   │       └── db/changelog/     # Liquibase миграции
+│   └── test/
+│       └── java/com/autodev/auth/  # Тесты
+├── build.gradle.kts
+├── Dockerfile
+└── README.md
 ```
 
-### 7.2 Проверка запуска
-```bash
-./gradlew bootRun
-```
+### 4.3. Структура базы данных
 
-Ожидаемое поведение:
-- Приложение запускается на порту 8080
-- Логи содержат сообщения о запуске Spring Boot
-- Приложение готово принимать запрос��
+Таблица `users` (создается через Liquibase):
+- `id` — BIGINT, PRIMARY KEY, AUTO_INCREMENT
+- `keycloak_user_id` — VARCHAR(255), UNIQUE, NOT NULL
+- `email` — VARCHAR(255), UNIQUE, NOT NULL
+- `first_name` — VARCHAR(255), NULL
+- `last_name` — VARCHAR(255), NULL
+- `phone` — VARCHAR(50), NULL
+- `role` — VARCHAR(50), NOT NULL
+- `enabled` — BOOLEAN, NOT NULL, DEFAULT TRUE
+- `created_at` — TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP
+- `updated_at` — TIMESTAMP, NOT NULL, DEFAULT CURRENT_TIMESTAMP
 
 ---
 
-## 8. История изменений
+## 5. API эндпоинты (предварительная спецификация)
 
-| Версия | Дата | Автор | Описание изменений |
-|--------|------|-------|-------------------|
-| 1.0 | 2026-06-02 | Аналитик | Первоначальная версия |
+| Метод | Путь | Описание | Роли |
+|-------|------|----------|------|
+| GET | `/api/v1/users/{id}` | Получить пользователя по ID | ADMIN, BUYER, SELLER, MODERATOR |
+| GET | `/api/v1/users/email/{email}` | Получить пользователя по email | ADMIN, BUYER, SELLER, MODERATOR |
+| GET | `/api/v1/users/` | Получить всех пользователей | ADMIN |
+| POST | `/api/v1/users/` | Создать нового пользователя | ADMIN |
+| PUT | `/api/v1/users/{id}` | Обновить данные пользователя | ADMIN |
+
+---
+
+## 6. Критерии приемки
+
+**HC-1.** Проект создан в директории `services/auth-service` со стандартной структурой Spring Boot.
+
+**HC-2.** В `build.gradle.kts` перечислены все необходимые зависимости с корректными версиями из `gradle.properties`.
+
+**HC-3.** Основной класс `AuthApplication` содержит все обязательные аннотации: `@SpringBootApplication`, `@EnableDiscoveryClient`, `@EnableCaching`, `@EnableKafka`.
+
+**HC-4.** Конфигурация `application.yml` настроена для локальной разработки с поддержкой всех необходимых сервисов.
+
+**HC-5.** Конфигурация `application-docker.yml` настроена для работы в Docker контейнере.
+
+**HC-6.** Проект компилируется без ошибок: `./gradlew build`.
+
+**HC-7.** Приложение запускается без ошибок: `./gradlew bootRun` (порт 8080).
+
+**HC-8.** Директория `src/main/resources/db/changelog/` создана для файлов миграций Liquibase.
+
+---
+
+## 7. Примечания для разработчика
+
+- Структура пакетов и классов может быть изменена разработчиком по усмотрению, если это улучшает читаемость и поддерживаемость кода.
+- Использование Lombok, MapStruct и других библиотек для сокращения boilerplate кода приветствуется.
+- Разработчик должен самостоятельно выбрать паттерны проектирования и структуру кода, соответствующие best practices Spring Boot.
+
+---
+
+## 8. Ответственный
+
+**Системный аналитик** — составил техническое задание  
+**Дата составления:** 2026-06-02  
+**Версия документа:** 1.0
