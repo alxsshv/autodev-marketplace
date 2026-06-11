@@ -9,4 +9,7 @@
       </persistence-unit>
     </persistence-units>
   </component>
+  <component name="AmplicodeSpringConfig">
+    <option name="useSmartDependencyPaste" value="false" />
+  </component>
 </project>

@@ -57,7 +57,7 @@ dependencies {
 }
 
 springBoot {
-    mainClass = "com.autodev.auth.AuthApplication"
+    mainClass = "com.autodev.platform.PlatformApplication"
 }
 
 tasks.withType<Test> {

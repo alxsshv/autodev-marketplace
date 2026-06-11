@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: AutoDev Marketplace API Gateway
+  version: 1.0.0
+  description: API Gateway for AutoDev Marketplace - routing, rate limiting, and JWT validation
+
+servers:
+  - url: http://api-gateway:8080
+    description: Docker environment
+  - url: http://localhost:8081
+    description: Local development
+
+paths:
+  /actuator/health:
+    get:
+      summary: Health check for API Gateway
+      tags:
+        - Actuator
+      responses:
+        '200':
+          description: Gateway is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [UP, DOWN, UNKNOWN]
+
+  /actuator/prometheus:
+    get:
+      summary: Prometheus metrics endpoint
+      tags:
+        - Actuator
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"
+
+security:
+  - bearerAuth: []
