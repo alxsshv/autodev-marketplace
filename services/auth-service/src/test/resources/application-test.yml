@@ -1,0 +1,46 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: auth-service
+
+---
+spring:
+  profiles:
+    active: "test"
+  config:
+    import: "consul:"
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${AUTH_DB_HOST:localhost}:${AUTH_DB_PORT:5438}/${AUTH_DB_NAME:services}
+    username: ${AUTH_DB_USER:postgres}
+    password: ${AUTH_DB_PASS:postgres}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USER:redis}
+      password: ${REDIS_PASSWORD:redis}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  cloud:
+    consul:
+      host: ${CONSUL_HOST:localhost}
+      port: ${CONSUL_PORT:8500}
+      discovery:
+        health-check-path: /actuator/health/
+        health-check-interval: 15s
+        health-check-timeout: 10s
+        prefer-ip-address: true
+        instance-id: ${spring.application.name}:${random.uuid}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, env, configprops
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
