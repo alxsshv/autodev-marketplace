@@ -1,8 +1,44 @@
 # AutoDev Marketplace — Стратегия мониторинга и наблюдаемости
 
-**Версия документа:** 1.0  
+**Версия документа:** 1.1  
 **Дата создания:** 2026-06-03  
-**Последнее обновление:** 2026-06-03
+**Последнее обновление:** 2026-06-13
+
+---
+
+## 1. Метрики безопасности
+
+### 1.1 Аутентификация и авторизация
+| Метрика | Описание | Целевое значение |
+|---------|----------|-----------------|
+| `auth_login_attempts_total` | Попытки входа | Counter |
+| `auth_login_failures_total` | Неудачные попытки | < 10/5min |
+| `auth_token_validations_total` | Валидации токенов | Counter |
+| `auth_token_cache_hits_total` | Попадания в кэш | > 90% |
+| `auth_service_token_requests_total` | Запросы service tokens | Counter |
+
+### 1.2 Входящие запросы (HTTP)
+| Метрика | Описание | Целевое значение |
+|---------|----------|-----------------|
+| `http_server_requests_seconds_count` | Количество запросов | Counter |
+| `http_server_requests_seconds_sum` | Суммарное время | Summary |
+| `http_server_requests_seconds_max` | Максимальное время | Gauge |
+| `http_server_requests_total{status="401"}` | Unauthorized запросы | < 1%/мин |
+| `http_server_requests_total{status="403"}` | Forbidden запросы | < 1%/мин |
+
+### 1.3 Rate Limiting
+| Метрика | Описание | Целевое значение |
+|---------|----------|-----------------|
+| `rate_limiter_requests_total` | Запросы с rate limit | Counter |
+| `rate_limiter_rejected_total` | Отклонённые запросы | < 100/мин |
+| `rate_limiter_tokens_remaining` | Оставшиеся токены | Gauge |
+
+### 1.4 Аудит и логирование
+| Метрика | Описание | Целевое значение |
+|---------|----------|-----------------|
+| `security_audit_events_total` | События аудита | Counter |
+| `security_alerts_total` | Алерты безопасности | Counter |
+| `security_events_lag` | Лаг обработки событий | < 100ms |
 
 ---
 

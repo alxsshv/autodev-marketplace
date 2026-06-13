@@ -85,7 +85,11 @@
 
 #### Базы данных
 - **Формат:** `services-database` (основная БД), `keycloak-database` (БД Keycloak)
-- **Имена схем:** `auth`, `catalog`, `order_service`, `payment_service`, `communication_service`, `platform_service`, `search_service`
+- **Имена схем:** `auth`, `catalog`, `order_service`, `payment_service`, `communication_service`, `platform_service`
+
+**Примечание по схеме `auth`:** Схема `auth` содержит только аутентификационные данные пользователей (таблица `users` с полями: id, keycloak_user_id, email, enabled). Все бизнес-данные пользователя хранятся в схеме `platform_service.users`.
+
+**Примечание:** Search Service не использует PostgreSQL напрямую (только Elasticsearch индексы), API Gateway не использует БД (только маршрутизация)
 
 #### Таблицы
 - **Формат:** `schema.table_name` (например, `auth.users`, `order_service.orders`)
@@ -135,7 +139,12 @@ autodev-marketplace/
 ├── services/                    # Микросервисы
 │   ├── api-gateway/            # API Gateway
 │   ├── auth-service/           # Аутентификация
-│   ├── user-service/           # Управление пользователями
+│   ├── catalog-service/        # Каталог товаров
+│   ├── order-service/          # Заказы
+│   ├── search-service/         # Поиск
+│   ├── payment-service/        # Оплата
+│   ├── communication-service/  # Коммуникация
+│   ├── platform-service/       # Платформа (Users + Moderation + Reviews + Analytics + Admin)
 │   └── ...
 ├── docs/                        # Документация
 │   └── architecture/           # Архитектурная документация

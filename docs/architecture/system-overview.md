@@ -1,8 +1,8 @@
 # AutoDev Marketplace — System Architecture Overview
 **Распределённая система продажи автозапчастей на стеке Java и Spring Boot**
 
-*Версия документа: 1.4*
-*Дата обновления: 2026-06-04*
+*Версия документа: 1.5*
+*Дата обновления: 2026-06-13*
 *Консолидация сервисов: 25+ → 8 сервисов для MVP*
 
 ---
@@ -170,12 +170,15 @@ graph TD
 - `AuthenticationFilter` - JWT валидация
 - `RateLimitingFilter` - ограничение запросов
 - `CORSFilter` - управление политиками CORS
+- `ServiceTokenFilter` - межсервисная аутентификация
+- `SecurityAuditFilter` - запись событий безопасности
 
 **Auth Service:**
 - `KeycloakIntegrationService` - интеграция с Keycloak
 - `TokenService` - генерация и валидация JWT
 - `UserService` - управление пользователями в Keycloak
 - `RoleService` - управление ролями и правами
+- `ServiceTokenService` - управление service account токенами
 
 **Catalog Service:**
 - `ProductCatalogService` - каталог товаров
@@ -260,6 +263,11 @@ graph TD
 - **Saga Pattern:** для управления распределёнными транзакциями (оформление заказа)
 - **CQRS:** разделение команд и запросов для оптимизации производительности
 - **Event Sourcing:** сохранение событий для восстановления состояния системы
+
+### Инфраструктура высокой доступности
+- **Redis Cluster with Sentinel:** 3 узла Redis (Cluster mode) + 3 узла Sentinel для автоматического failover кэша
+- **PostgreSQL Primary-Replica:** синхронная репликация между зонами отказа
+- **Kafka Cluster:** 3 брокера с replication.factor=3 и min.insync.replicas=2
 
 ### Стратегия развёртывания
 - **Blue-Green Deployment:** для обеспечения zero-downtime обновлений в production
@@ -406,6 +414,7 @@ graph TD
 - `VideoCall`: информация о видеозвонках
 - `IntegrationLog`: логи интеграции с внешними системами
 - `AuditLog`: аудитные записи действий
+- `SecurityEvent`: события безопасности (логины, попытки входа, изменения прав)
 
 ## 8. Технологический стек
 
@@ -429,7 +438,7 @@ graph TD
 
 ### Базы данных и кэширование
 - **PostgreSQL**: 15 - основная реляционная база данных для хранения структурированных данных
-- **Redis**: 7 - кэширование часто запрашиваемых данных и хранение сессий
+- **Redis**: 7 - кэширование часто запрашиваемых данных и хранение сессий (Redis Cluster с Sentinel для автоматического failover)
 - **Elasticsearch**: 8.13.0 - полнотекстовый поиск и агрегации
 - **Apache Kafka**: 7.3.2 - асинхронная коммуникация между сервисами, event sourcing
 - **Zookeeper**: 7.3.2 - координация Kafka кластера
@@ -472,3 +481,199 @@ graph TD
 - Liquibase 4.27.0 полностью поддерживается Spring Boot 3.4.5
 - Указанные версии Grafana, Prometheus, Loki, Tempo и Alloy совместимы между собой и образуют полноценную альтернативу ELK стеку для мониторинга и логирования
 - Все версии библиотек и фреймворков протестированы на совместимость в рамках Spring Boot 3.4.5
+
+---
+
+## 8. Безопасность
+
+### 8.1 Общая стратегия
+
+Документ описывает стратегию обеспечения безопасности AutoDev Marketplace, включая аутентификацию, авторизацию, шифрование данных и аудит.
+
+### 8.2 Межсервисная аутентификация
+
+#### Для MVP (без TLS)
+- **Service Account Tokens через Keycloak**
+  - Каждый сервис имеет свой service account в Keycloak
+  - При запуске сервис получает JWT token от Keycloak
+  - Для межсервисных вызовов сервисы предъявляют свои токены
+  - Получающий сервис валидирует токен через Keycloak или кэш в Redis
+
+#### Для продакшена (планируемое улучшение)
+- **MTLS (mutual TLS) для service-to-service коммуникации**
+  - Каждый сервис имеет сертификат
+  - TLS handshake проверяет сертификаты обеих сторон
+  - Высокая степень безопасности для production окружения
+
+#### Рекомендация для MVP
+Использовать Service Account Tokens через Keycloak:
+- Простота реализации
+- Уже интегрирован Keycloak
+- Возможность отозвать токен в любой момент
+- Поддержка в Spring Security
+
+### 8.3 Стратегия шифрования
+
+#### Для MVP
+- **TLS 1.3 для внешних API** (client ↔ service)
+- **Внутренняя сеть без TLS** между сервисами (Docker network isolation)
+- **Шифрование данных в покое**:
+  - PostgreSQL: SSL для внешних подключений
+  - Регулярные бэкапы с шифрованием (MinIO server-side encryption)
+
+#### Для продакшена (планируемое улучшение)
+- **MTLS между сервисами** (внутренняя коммуникация)
+- **Шифрование на уровне приложения** для чувствительных данных:
+  - Платёжные данные: AES-256
+  - Персональные данные: AES-256
+  - Ключи хранятся в Hashicorp Vault
+
+#### Шифрование паролей
+- BCrypt для пользовательских паролей
+- PBKDF2 для service account паролей
+
+### 8.4 RBAC (Role-Based Access Control)
+
+#### Уровни доступа
+| Роль | Описание | Примеры сервисов |
+|------|----------|-----------------|
+| BUYER | Покупатель товаров | order-service, catalog-service |
+| SELLER | Продавец товаров | catalog-service, order-service, platform-service |
+| MODERATOR | Модератор контента | platform-service, communication-service |
+| ADMIN | Администратор системы | auth-service, platform-service, admin-service |
+
+#### Применение RBAC по сервисам
+
+**Auth Service:**
+- BUYER: login, refresh, logout, view profile
+- SELLER: login, refresh, logout, view profile
+- MODERATOR: login, refresh, logout, view profile
+- ADMIN: все права BUYER + управление пользователями и ролями
+
+**Platform Service:**
+- BUYER: view own profile, manage favorites, search
+- SELLER: manage store, manage own products, view analytics
+- MODERATOR: moderate content, view reports
+- ADMIN: system configuration, user management
+
+**Order Service:**
+- BUYER: create orders, view own orders
+- SELLER: view orders for own products, update order status
+- MODERATOR: view all orders
+- ADMIN: full access
+
+**Catalog Service:**
+- BUYER: view products, search
+- SELLER: create/edit own products
+- MODERATOR: view all products, flag inappropriate
+- ADMIN: full access, category management
+
+**Payment Service:**
+- BUYER: process payment for own orders
+- SELLER: view payment history for own products
+- ADMIN: full access, fraud detection
+
+**Communication Service:**
+- BUYER: send messages to sellers, receive messages
+- SELLER: send messages to buyers, receive messages
+- MODERATOR: view all messages for moderation
+- ADMIN: full access
+
+### 8.5 План аудита безопасности
+
+#### Еженедельные проверки
+- Логи аутентификации (неудачные попытки входа)
+- Статистика по rate limiting
+- Изменения в RBAC (новые роли, изменения прав)
+
+#### Ежемесячные аудиты
+- Ревью access logs всех сервисов
+- Проверка сертификатов и ключей
+- Анализ CVE для используемых библиотек
+- Аудит конфигураций (application.yml, docker-compose)
+
+#### Квартальные аудиты
+- Penetration testing (внешний аудит)
+- Security code review
+- Аудит бэкапов и восстановления
+- Тестирование disaster recovery плана
+
+#### Аудит перед релизом
+- Security checklist для каждого сервиса
+- Review PR с изменениями безопасности
+- Тестирование новых endpoints на инъекции
+
+#### Инструменты аудита
+- **Логирование:** Loki с алертингом на подозрительные действия
+- **Мониторинг:** Prometheus метрики по безопасности (error rate, auth failures)
+- **Трейсинг:** Tempo для отслеживания запросов
+- **Static Analysis:** SonarQube для анализа кода
+- **Dynamic Analysis:** OWASP ZAP для penetration testing
+
+### 8.6 OWASP Top 10 compliance
+
+#### Меры по защите
+1. **A01:2021 – Broken Access Control**
+   - RBAC для всех сервисов
+   - JWT валидация на каждом endpoint
+   - Rate limiting на API Gateway
+
+2. **A02:2021 – Cryptographic Failures**
+   - BCrypt для паролей
+   - TLS 1.3 для внешних API
+   - Шифрование бэкапов
+
+3. **A03:2021 – Injection**
+   - Prepared statements (JPA/Hibernate)
+   - Валидация входных данных
+   - SQL инъекции блокируются на уровне ORM
+
+4. **A04:2021 – Insecure Design**
+   - Security by design принцип
+   - Threat modeling для критичных сервисов
+   - Code review с упором на безопасность
+
+5. **A05:2021 – Security Misconfiguration**
+   - Externalized configuration
+   - Secrets через environment variables
+   - Нет hardcoded credentials
+
+6. **A06:2021 – Vulnerable Components**
+   - Regular dependency updates
+   - Snyk/Dependabot для мониторинга CVE
+   - Отказ от устаревших библиотек
+
+7. **A07:2021 – Identification and Authentication Failures**
+   - JWT expiration (12 часов для access token, 7 дней для refresh token)
+   - Rate limiting на login (5 попыток в минуту)
+   - Password policies (минимум 8 символов, цифры, спецсимволы)
+
+8. **A08:2021 – Software and Data Integrity Failures**
+   - Signing docker images (Notary)
+   - Secure CI/CD pipeline (GitLab CI)
+   - Checksum verification для зависимостей
+
+9. **A09:2021 – Security Logging and Monitoring Failures**
+   - Centralized logging (Loki)
+   - Real-time monitoring (Prometheus)
+   - Alerting на security events
+
+10. **A10:2021 – Server-Side Request Forgery**
+    - URL validation (белый список доменов)
+    - Restricted domains
+    - Internal network isolation
+
+### 8.7 Security incident response
+
+#### Процедура реагирования
+1. **Обнаружение:** Алерт через Prometheus/Grafana
+2. **Оценка:** Определение масштаба инцидента
+3. **Изоляция:** Блокировка affected сервисов
+4. **Устранение:** Исправление уязвимости
+5. **Восстановление:** Возврат сервисов в нормальное состояние
+6. **Анализ:** Post-mortem с выводами
+
+#### Контакты в экстренной ситуации
+- Security Team: #security-incidents
+- Slack Alert: @security-oncall
+- Emergency hotline: +7XXX-XXX-XXXX

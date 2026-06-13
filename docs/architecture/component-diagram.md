@@ -20,6 +20,13 @@
 - **communication-service** — уведомления и сообщения (Notifications+Messaging)
 - **platform-service** — платформенные функции (Users+Moderation+Reviews+Analytics+Admin)
 
+**Инфраструктура:**
+- **PostgreSQL** — основная реляционная база данных (8 схем)
+- **Redis Cluster with Sentinel** — кэширование с отказоустойчивостью через Sentinel
+- **Elasticsearch** — полнотекстовый поиск
+- **Apache Kafka** — асинхронная коммуникация между сервисами
+- **MinIO** — объектное хранилище для медиафайлов
+
 ---
 
 ## Диаграмма компонентов (C4 Level 2)
@@ -156,12 +163,13 @@ graph TD
     D --> E
     E --> F
     F --> G
-    G --> Redis[Redis]
+    G --> Redis[Redis Cluster with Sentinel]
     C --> PostgreSQL[PostgreSQL - users]
     
     classDef auth fill:#9C27B0,stroke:#333,stroke-width:1px,color:white;
     classDef component fill:#2196F3,stroke:#333,stroke-width:1px,color:white;
     classDef storage fill:#4CAF50,stroke:#333,stroke-width:1px,color:white;
+    classDef redis fill:#FF9800,stroke:#333,stroke-width:1px,color:white;
     
     class A,B,C,D,E,F,G auth
     class Redis,PostgreSQL storage
@@ -201,7 +209,7 @@ graph TD
     K --> PostgreSQL
     L --> PostgreSQL
     
-    A --> Redis[Redis]
+    A --> Redis[Redis Cluster]
     D --> Redis
     E --> Redis
     F --> Redis
@@ -292,6 +300,10 @@ graph TD
     F --> MinIO[MinIO]
     G --> PostgreSQL
     H --> PostgreSQL
+    
+    A --> Redis[Redis Cluster]
+    B --> Redis
+    C --> Redis
     
     A --> Inventory[Catalog Service - reserving]
     D --> Logistics[Catalog Service - carriers]
@@ -384,12 +396,16 @@ graph TD
 
 | Схема | Сервис | Описание |
 |-------|--------|----------|
-| `auth` | Auth Service | Пользователи и роли |
-| `catalog` | Catalog Service | Товары, категории, цены, наличие |
+| `auth` | Auth Service | Пользователи, роли, токены |
+| `catalog` | Catalog Service | Товары, категории, бренды, цены, наличие |
 | `order_service` | Order Service | Заказы, корзины, доставка, возвраты |
-| `payment` | Payment Service | Платежи, эскроу |
-| `communication_service` | Communication Service | Уведомления, чат |
+| `payment_service` | Payment Service | Платежи, эскроу |
+| `communication_service` | Communication Service | Уведомления, сообщения, подписки, шаблоны |
 | `platform_service` | Platform Service | Пользователи, модерация, отзывы, аналитика, админ |
+
+**Примечание:**
+- Search Service не использует PostgreSQL напрямую (только Elasticsearch индексы)
+- API Gateway не использует БД (только маршрутизация)
 
 ### Redis
 | Использование | Ключи |
@@ -405,6 +421,8 @@ graph TD
 | `products` | Catalog Service | Поиск товаров |
 | `users` | Platform Service | Поиск пользователей |
 | `orders` | Order Service | Поиск заказов |
+
+**Примечание:** Elasticsearch используется только для полнотекстового поиска и не хранит данные в PostgreSQL-совместимом виде. Индексы синхронизируются через Kafka события.
 
 ---
 
@@ -424,6 +442,14 @@ graph TD
   - Order Service → Kafka (order_created)
   - Payment Service → Kafka (payment_completed)
 
+### Кэширование (Redis Cluster)
+- **Использование:** Высокоскоростное кэширование с отказоустойчивостью через Sentinel
+- **Примеры:**
+  - Auth Service → Redis (кэш токенов, сессий)
+  - Catalog Service → Redis (кэш категорий, популярных товаров)
+  - Order Service → Redis (кэш корзин, бронирований)
+  - Platform Service → Redis (кэш профилей, избранных)
+
 ### Стратегия выбора
 | Сценарий | Метод |
 |----------|-------|
@@ -432,6 +458,15 @@ graph TD
 | Слабая связанность сервисов | Kafka |
 | Высокая производительность | Kafka |
 | Простая интеграция | REST API |
+| Кэширование данных | Redis Cluster |
+
+### Синхронное (REST API + Redis)
+- **Использование:** Прямые запросы с ожиданием ответа, кэширование
+- **Примеры:**
+  - API Gateway → Microservices
+  - Order Service → Inventory Service (резервирование)
+  - Payment Service → Sberbank API
+  - All Services ← Redis Cluster (кэш)
 
 ---
 

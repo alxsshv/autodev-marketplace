@@ -3,6 +3,13 @@
 - Работы выполняются без настройки TLS и HTTPS до определённого этапа;
 - Порт 8080 на хостовой машине занять другими процессами, для работы используется 8081.
 
+## Безопасность
+
+- **Стратегия безопасности:** docs/architecture/security-strategy.md
+- **Межсервисная аутентификация:** Service Account Tokens через Keycloak (MVP)
+- **Шифрование:** TLS 1.3 для внешних API, внутри сети без TLS (MVP)
+- **RBAC:** 4 уровня доступа (BUYER, SELLER, MODERATOR, ADMIN)
+
 ## Документация
 
 - **Консолидация сервисов (MVP: 8-10 сервисов):**docs/architecture/service-consolidation.md
@@ -13,6 +20,8 @@
 - **Дорожная карта:** docs/architecture/roadmap.md
 - **Политика взаимодействия:** docs/architecture/communication-policy.md
 - **План отказоустойчивости:** docs/architecture/resilience-plan.md
+- **Стратегия безопасности:** docs/architecture/security-strategy.md
+- **Стратегия мониторинга:** docs/architecture/observability-strategy.md
 - **Модель данных:** docs/architecture/data-model.md
 - **Glossary:** docs/architecture/glossary.md
 - **Диаграмма компонентов:** docs/architecture/component-diagram.md

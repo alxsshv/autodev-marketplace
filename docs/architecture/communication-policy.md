@@ -1,14 +1,298 @@
 # AutoDev Marketplace — Политика взаимодействия сервисов
 
-**Версия документа:** 1.0  
+**Версия документа:** 1.1  
 **Дата создания:** 2026-06-03  
-**Последнее обновление:** 2026-06-03
+**Последнее обновление:** 2026-06-13
+
+---
+
+## 1. Безопасность взаимодействия
+
+### 1.1 Аутентификация сервисов
+
+Каждый микросервис AutoDev Marketplace имеет уникальный service account в Keycloak и использует JWT токены для аутентификации при межсервисных вызовах.
+
+#### Service Account Token
+```
+{
+  "sub": "auth-service",
+  "iss": "https://keycloak.autodev.local",
+  "aud": ["api-gateway", "catalog-service", "order-service"],
+  "roles": ["SERVICE_AUTH", "SERVICE_PLATFORM"],
+  "exp": 1720000000,
+  "iat": 1719996400
+}
+```
+
+#### Генерация токена (Java)
+```java
+@Service
+public class ServiceTokenService {
+    
+    private final RestTemplate restTemplate;
+    
+    public String getServiceToken(String serviceName) {
+        String tokenEndpoint = "https://keycloak.autodev.local/realms/autodev/protocol/openid-connect/token";
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "client_credentials");
+        body.add("client_id", serviceName + "-service");
+        body.add("client_secret", "${" + serviceName.toUpperCase() + "_CLIENT_SECRET}");
+        
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+        
+        TokenResponse response = restTemplate.postForObject(
+            tokenEndpoint,
+            request,
+            TokenResponse.class
+        );
+        
+        return response.getAccessToken();
+    }
+}
+```
+
+### 1.2 Синхронное взаимодействие с аутентификацией
+
+#### Заголовки для межсервисных вызовов
+| Header | Описание | Обязательный |
+|--------|----------|-------------|
+| `Authorization` | Service account JWT токен | Да |
+| `X-Request-ID` | ID запроса для трассировки | Да |
+| `X-Correlation-ID` | Correlation ID для логирования | Да |
+| `X-Service-Name` | Имя отправляющего сервиса | Да |
+
+#### Пример использования (Feign Client с токеном)
+```java
+@Service
+public class AuthClientService {
+    
+    private final AuthClient authClient;
+    private final ServiceTokenService tokenService;
+    
+    public UserDto getCurrentUser(String requestId) {
+        String token = tokenService.getServiceToken("catalog-service");
+        return authClient.getCurrentUser(token, requestId);
+    }
+}
+
+@FeignClient(
+    name = "auth-service",
+    url = "${auth.service.url:http://auth-service:8082}",
+    configuration = FeignConfig.class
+)
+public interface AuthClient {
+    
+    @GetMapping("/api/v1/auth/me")
+    UserDto getCurrentUser(
+        @RequestHeader("Authorization") String token,
+        @RequestHeader("X-Request-ID") String requestId
+    );
+}
+```
+
+### 1.3 Асинхронное взаимодействие (Kafka)
+
+Каждое сообщение Kafka подписывается сервисом-издателем:
+
+```json
+{
+  "id": "uuid",
+  "type": "user.profile_updated",
+  "timestamp": "2026-06-03T10:30:00Z",
+  "version": "1.0",
+  "payload": {
+    "user_id": 123,
+    "email": "user@example.com"
+  },
+  "metadata": {
+    "source_service": "platform-service",
+    "source_host": "platform-service-1",
+    "correlation_id": "abc-123",
+    "signature": "JWT-signature-of-message"
+  }
+}
+```
+
+### 1.4 Проверка токена сервиса
+
+```java
+@Component
+public class ServiceTokenFilter extends OncePerRequestFilter {
+    
+    private final KeycloakService keycloakService;
+    
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain chain) {
+        String authHeader = request.getHeader("Authorization");
+        
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            
+            if (keycloakService.validateServiceToken(token)) {
+                chain.doFilter(request, response);
+                return;
+            }
+        }
+        
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+    }
+}
+```
 
 ---
 
 ## Обзор
 
 Документ описывает правила и паттерны взаимодействия между микросервисами AutoDev Marketplace, включая синхронные вызовы, асинхронные сообщения, Service Discovery, Circuit Breaker и стратегии обработки ошибок.
+
+---
+
+## Межсервисная аутентификация
+
+### Общие принципы
+
+Каждый микросервис AutoDev Marketplace имеет уникальный service account в Keycloak и использует JWT токены для аутентификации при межсервисных вызовах.
+
+### Токены сервисов
+
+#### Service Account Token
+```
+{
+  "sub": "auth-service",
+  "iss": "https://keycloak.autodev.local",
+  "aud": ["api-gateway", "catalog-service", "order-service"],
+  "roles": ["SERVICE_AUTH", "SERVICE_PLATFORM"],
+  "exp": 1720000000,
+  "iat": 1719996400
+}
+```
+
+#### Генерация токена (Java)
+```java
+@Service
+public class ServiceTokenService {
+    
+    private final RestTemplate restTemplate;
+    
+    public String getServiceToken(String serviceName) {
+        String tokenEndpoint = "https://keycloak.autodev.local/realms/autodev/protocol/openid-connect/token";
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "client_credentials");
+        body.add("client_id", serviceName + "-service");
+        body.add("client_secret", "${" + serviceName.toUpperCase() + "_CLIENT_SECRET}");
+        
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
+        
+        TokenResponse response = restTemplate.postForObject(
+            tokenEndpoint,
+            request,
+            TokenResponse.class
+        );
+        
+        return response.getAccessToken();
+    }
+}
+```
+
+### Синхронное взаимодействие с аутентификацией
+
+#### Заголовки для межсервисных вызовов
+| Header | Описание | Обязательный |
+|--------|----------|-------------|
+| `Authorization` | Service account JWT токен | Да |
+| `X-Request-ID` | ID запроса для трассировки | Да |
+| `X-Correlation-ID` | Correlation ID для логирования | Да |
+| `X-Service-Name` | Имя отправляющего сервиса | Да |
+
+#### Пример использования (Feign Client с токеном)
+```java
+@Service
+public class AuthClientService {
+    
+    private final AuthClient authClient;
+    private final ServiceTokenService tokenService;
+    
+    public UserDto getCurrentUser(String requestId) {
+        String token = tokenService.getServiceToken("catalog-service");
+        return authClient.getCurrentUser(token, requestId);
+    }
+}
+
+@FeignClient(
+    name = "auth-service",
+    url = "${auth.service.url:http://auth-service:8082}",
+    configuration = FeignConfig.class
+)
+public interface AuthClient {
+    
+    @GetMapping("/api/v1/auth/me")
+    UserDto getCurrentUser(
+        @RequestHeader("Authorization") String token,
+        @RequestHeader("X-Request-ID") String requestId
+    );
+}
+```
+
+### Асинхронное взаимодействие (Kafka)
+
+Каждое сообщение Kafka подписывается сервисом-издателем:
+
+```json
+{
+  "id": "uuid",
+  "type": "user.profile_updated",
+  "timestamp": "2026-06-03T10:30:00Z",
+  "version": "1.0",
+  "payload": {
+    "user_id": 123,
+    "email": "user@example.com"
+  },
+  "metadata": {
+    "source_service": "platform-service",
+    "source_host": "platform-service-1",
+    "correlation_id": "abc-123",
+    "signature": "JWT-signature-of-message"
+  }
+}
+```
+
+### Проверка токена сервиса
+
+```java
+@Component
+public class ServiceTokenFilter extends OncePerRequestFilter {
+    
+    private final KeycloakService keycloakService;
+    
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain chain) {
+        String authHeader = request.getHeader("Authorization");
+        
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            
+            if (keycloakService.validateServiceToken(token)) {
+                chain.doFilter(request, response);
+                return;
+            }
+        }
+        
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+    }
+}
+```
 
 ---
 
@@ -154,8 +438,8 @@ public interface AuthClient {
     "last_name": "Doe"
   },
   "metadata": {
-    "source_service": "user-service",
-    "source_host": "user-service-1",
+    "source_service": "platform-service",
+    "source_host": "platform-service-1",
     "correlation_id": "abc-123"
   }
 }
@@ -181,7 +465,7 @@ public class UserEventPublisher {
     private final KafkaTemplate<String, String> kafkaTemplate;
     
     public void publishUserRegistered(Long userId, String email) {
-        String topic = "user.user_registered";
+        String topic = "platform.user_registered";
         String key = "user:" + userId;
         
         UserRegisteredEvent event = new UserRegisteredEvent(
@@ -206,8 +490,8 @@ public class UserRegisteredEventHandler {
     private final UserService userService;
     
     @KafkaListener(
-        topics = "user.user_registered",
-        groupId = "user-service-group"
+        topics = "platform.user_registered",
+        groupId = "platform-service-group"
     )
     public void handleUserRegistered(String payload) {
         UserRegisteredEvent event = objectMapper.readValue(payload, UserRegisteredEvent.class);

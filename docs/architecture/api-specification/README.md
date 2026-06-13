@@ -61,6 +61,7 @@ docs/architecture/api-specification/
 | search-service | search-service |
 | payment-service | payment-service |
 | user-service | platform-service (Users + Profiles) |
+| seller-dashboard-service | platform-service (Seller Dashboard) |
 | moderation-service | platform-service (Moderation) |
 | review-service | platform-service (Reviews) |
 | analytics-service | platform-service (Analytics) |
