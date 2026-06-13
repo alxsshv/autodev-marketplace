@@ -244,10 +244,25 @@ Catalog Service → Kafka → все сервисы (событие price_update
 - **Kubernetes** — оркестрация контейнеров
 - **Docker** — контейнеризация
 - **Consul** — Service Discovery и KV-store
-- **PostgreSQL** — основная база данных
-- **Redis** — кэширование и сессии
-- **Elasticsearch** — полнотекстовый поиск
-- **Apache Kafka** — асинхронная коммуникация
+- **PostgreSQL** — основная база данных (Primary-Replica)
+- **Redis** — кэширование и сессии (Cluster с Sentinel для автоматического failover)
+- **Elasticsearch** — полнотекстовый поиск (Cluster с 3 узлами)
+- **Apache Kafka** — асинхронная коммуникация между сервисами
+- **ZooKeeper** — координация Kafka кластера (3 узла)
+
+**Конфигурация Redis Cluster с Sentinel:**
+- **3 узла Redis** (Cluster mode) для хранения данных
+- **3 узла Sentinel** для автоматического failover и мониторинга
+- **sentinel monitor redis-master redis-cluster 6379 2** — мониторинг master
+- **sentinel down-after-milliseconds redis-master 30000** — таймаут для объявления недоступным
+- **sentinel failover-timeout redis-master 180000** — таймаут для failover
+
+**Конфигурация Kafka Cluster:**
+- **3 брокера** для отказоустойчивости
+- **replication.factor=3** для всех топиков (данные дублируются на 3 брокера)
+- **min.insync.replicas=2** для гарантии записи данных
+- **unclean.leader.election.enable=false** для предотвращения потери данных
+- **isr** — In-Sync Replicas: топик устойчив к потере 1 брокера
 
 ### Инфраструктурные сервисы
 - **Prometheus** — сбор метрик

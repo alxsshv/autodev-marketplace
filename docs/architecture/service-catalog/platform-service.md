@@ -147,47 +147,36 @@ dependencies {
 ### Схема: `platform_service`
 
 #### Таблица: `users`
-```sql
-CREATE TABLE platform_service.users (
-    id                  BIGSERIAL      PRIMARY KEY,
-    keycloak_user_id    VARCHAR(255)   NOT NULL   UNIQUE,
-    email               VARCHAR(255)   NOT NULL   UNIQUE,
-    first_name          VARCHAR(255)   NULL,
-    last_name           VARCHAR(255)   NULL,
-    phone               VARCHAR(50)    NULL,
-    role                VARCHAR(50)    NOT NULL,
-    verified            BOOLEAN        NOT NULL   DEFAULT FALSE,
-    created_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP
-);
-```
+| Поле | Тип | Описание | Индекс | Ограничения |
+|------|-----|----------|--------|-------------|
+| user_id | BIGSERIAL | Первичный ключ (ссылка на auth.users.id) | PRIMARY KEY | NOT NULL |
+| keycloak_user_id | VARCHAR(255) | ID пользователя в Keycloak | UNIQUE | NOT NULL |
+| email | VARCHAR(255) | Email пользователя | | NOT NULL |
+| first_name | VARCHAR(255) | Имя пользователя | | NULL |
+| last_name | VARCHAR(255) | Фамилия пользователя | | NULL |
+| phone | VARCHAR(50) | Телефон | | NULL |
+| role | VARCHAR(50) | Роль: BUYER, SELLER | | NOT NULL |
+| verified | BOOLEAN | Верифицирован ли пользователь | | NOT NULL |
+| avatar_url | VARCHAR(255) | URL аватара | | NULL |
+| store_name | VARCHAR(255) | Название магазина (для продавцов) | | NULL |
+| store_description | TEXT | Описание магазина | | NULL |
+| store_logo_url | VARCHAR(255) | URL логотипа магазина | | NULL |
+| verification_status | VARCHAR(50) | Статус верификации магазина | | NOT NULL |
+| created_at | TIMESTAMP | Дата создания | | NOT NULL |
+| updated_at | TIMESTAMP | Дата обновления | | NOT NULL |
 
-#### Таблица: `user_profiles`
-```sql
-CREATE TABLE platform_service.user_profiles (
-    id                  BIGSERIAL      PRIMARY KEY,
-    user_id             BIGINT         NOT NULL   UNIQUE,
-    avatar_url          VARCHAR(255)   NULL,
-    verified            BOOLEAN        NOT NULL   DEFAULT FALSE,
-    created_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES platform_service.users(id)
-);
-```
+**Индексы:**
+- `idx_platform_users_keycloak_user_id` ON (keycloak_user_id)
+- `idx_platform_users_email` ON (email)
+- `idx_platform_users_role` ON (role)
+- `idx_platform_users_store` ON (store_name)
+- `idx_platform_users_verified` ON (verified)
+- `idx_platform_users_verification_status` ON (verification_status)
 
-#### Таблица: `store_settings`
-```sql
-CREATE TABLE platform_service.store_settings (
-    id                  BIGSERIAL      PRIMARY KEY,
-    user_id             BIGINT         NOT NULL   UNIQUE,
-    store_name          VARCHAR(255)   NULL,
-    store_description   TEXT           NULL,
-    store_logo_url      VARCHAR(255)   NULL,
-    verification_status VARCHAR(50)    NOT NULL   DEFAULT 'pending',
-    created_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES platform_service.users(id)
-);
+**Ограничения:**
+- `fk_platform_users_user_id` FOREIGN KEY (user_id) REFERENCES auth.users(id)
+
+**Примечание:** Эта таблица содержит все бизнес-данные пользователя. Ссылка `user_id` связывает её с `auth.users.id` для аутентификации.
 ```
 
 #### Таблица: `moderation_items`
@@ -234,6 +223,75 @@ CREATE TABLE platform_service.analytics (
     dimension           VARCHAR(100)   NULL,
     date                DATE           NOT NULL,
     created_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+### Дополнительные таблицы (из data-model.md)
+
+#### Таблица: `loyalty_accounts`
+```sql
+CREATE TABLE platform_service.loyalty_accounts (
+    id                  BIGSERIAL      PRIMARY KEY,
+    user_id             BIGINT         NOT NULL   UNIQUE,
+    balance             NUMERIC(10,2)  NOT NULL   DEFAULT 0,
+    total_spent         NUMERIC(10,2)  NOT NULL   DEFAULT 0,
+    tier                VARCHAR(50)    NOT NULL   DEFAULT 'bronze',
+    created_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES platform_service.users(id)
+);
+```
+
+#### Таблица: `search_history`
+```sql
+CREATE TABLE platform_service.search_history (
+    id                  BIGSERIAL      PRIMARY KEY,
+    user_id             BIGINT         NOT NULL,
+    query               TEXT           NOT NULL,
+    results_count       INTEGER        NULL,
+    created_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES platform_service.users(id)
+);
+```
+
+#### Таблица: `view_history`
+```sql
+CREATE TABLE platform_service.view_history (
+    id                  BIGSERIAL      PRIMARY KEY,
+    user_id             BIGINT         NOT NULL,
+    product_id          BIGINT         NOT NULL,
+    viewed_at           TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES platform_service.users(id),
+    FOREIGN KEY (product_id) REFERENCES catalog.products(id)
+);
+```
+
+#### Таблица: `favorite_items`
+```sql
+CREATE TABLE platform_service.favorite_items (
+    id                  BIGSERIAL      PRIMARY KEY,
+    user_id             BIGINT         NOT NULL,
+    folder_id           BIGINT         NULL,
+    product_id          BIGINT         NOT NULL,
+    created_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES platform_service.users(id),
+    FOREIGN KEY (folder_id) REFERENCES platform_service.favorite_folders(id),
+    FOREIGN KEY (product_id) REFERENCES catalog.products(id)
+);
+```
+
+#### Таблица: `favorite_folders`
+```sql
+CREATE TABLE platform_service.favorite_folders (
+    id                  BIGSERIAL      PRIMARY KEY,
+    user_id             BIGINT         NOT NULL,
+    name                VARCHAR(255)   NOT NULL,
+    description         VARCHAR(255)   NULL,
+    created_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP      NOT NULL   DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES platform_service.users(id)
 );
 ```
 

@@ -395,14 +395,28 @@ spec:
 
 ## Базы данных
 
-### PostgreSQL (Primary-Replica)
+### PostgreSQL (Primary-Replica with Liquibase Migrations)
 
-#### Primary Node
+PostgreSQL is used as the primary database for microservices with persistent relational data. Each service has its own schema:
+- **auth** - Auth Service
+- **catalog** - Catalog Service
+- **order_service** - Order Service
+- **payment_service** - Payment Service
+- **communication_service** - Communication Service
+- **platform_service** - Platform Service
+
+**Note:** Search Service and API Gateway do not use PostgreSQL directly - Search Service uses Elasticsearch for full-text search, and API Gateway acts as a reverse proxy without direct database access.
+
+**Database migrations are managed using Liquibase** to ensure schema consistency across environments.
+
+#### PostgreSQL Primary Node
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: postgresql-primary
+  labels:
+    app: postgresql-primary
 spec:
   ports:
   - port: 5432
@@ -413,6 +427,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgresql-primary
+  labels:
+    app: postgresql-primary
 spec:
   serviceName: postgresql-primary
   replicas: 1
@@ -436,12 +452,14 @@ spec:
           storage: 100Gi
 ```
 
-#### Replica Node
+#### PostgreSQL Replica Node
 ```yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgresql-replica
+  labels:
+    app: postgresql-replica
 spec:
   serviceName: postgresql-replica
   replicas: 1
@@ -472,7 +490,19 @@ Replica (eu-west-1b)
 DR Site (eu-west-2)
 ```
 
-### Redis Cluster
+### Redis Cluster with Sentinel
+
+**Архитектура:**
+- **3 узла Redis** (Cluster mode) для хранения данных
+- **3 узла Sentinel** для автоматического failover и мониторинга
+- Sentinel обеспечивает высокую доступность кэша через автоматический выбор нового master
+
+**Настройки Sentinel:**
+- **sentinel monitor redis-master redis-cluster 6379 2** — мониторинг master
+- **sentinel down-after-milliseconds redis-master 30000** — таймаут для объявления недоступным
+- **sentinel failover-timeout redis-master 180000** — таймаут для failover
+- **sentinel parallel-syncs redis-master 1** — синхронизация 1 replica одновременно
+
 ```yaml
 apiVersion: redis.redis.io/v1alpha1
 kind: Redis
@@ -481,6 +511,8 @@ metadata:
 spec:
   redis:
     replicas: 3
+    sentinel:
+      replicas: 3
     resources:
       requests:
         cpu: "100m"
@@ -531,6 +563,9 @@ spec:
       offsets.topic.replication.factor: 3
       transaction.state.log.replication.factor: 3
       transaction.state.log.min.isr: 2
+      min.insync.replicas: 2
+      unclean.leader.election.enable: false
+      auto.create.topics.enable: false
     storage:
       type: ephemeral
   zookeeper:
@@ -538,6 +573,19 @@ spec:
     storage:
       type: ephemeral
 ```
+
+**Конфигурация отказоустойчивости:**
+- **replicas=3:** 3 брокера для распределения нагрузки и отказоустойчивости
+- **offsets.topic.replication.factor=3:** Гарантия хранения offset консьюмеров
+- **transaction.state.log.replication.factor=3:** Отказоустойчивость транзакций
+- **min.insync.replicas=2:** Минимум 2 реплики для подтверждения записи
+- **unclean.leader.election.enable=false:** Предотвращение потери данных при failover
+- **auto.create.topics.enable=false:** Явное управление топиками
+
+**ISR (In-Sync Replicas):**
+- Данные реплицируются на 3 брокера
+- При потере 1 брокера топик остаётся доступен для чтения и записи
+- При потере 2-х брокеров топик становится недоступен для записи
 
 ---
 
@@ -800,6 +848,89 @@ graph TD
 
 ---
 
+## Database Migration Strategy
+
+### Overview
+Database schema migrations are managed using **Liquibase** for all PostgreSQL databases in the system.
+
+### Tools
+- **Liquibase** 4.27.0 — версионирование и миграция схем
+- **PostgreSQL** 15 — основная реляционная база данных
+
+### Strategy
+- **Single Primary Database**: All microservices share one PostgreSQL instance but use separate schemas
+- **Schema per Service**: Each service has its own schema (`auth`, `catalog`, `order_service`, `payment_service`, `communication_service`, `platform_service`)
+- **Version Control**: All migrations are tracked in Git with Liquibase changelog files
+
+### Migration Naming Convention
+Follows Liquibase format: `v{major}.{minor}.{patch}/date-description.sql`
+- Example: `v1.0.0/03-06-2026-create-table-users.sql`
+
+### Migration Execution
+- **Startup**: Liquibase automatically runs migrations on service startup
+- **CI/CD**: Migrations are applied during deployment pipeline
+- **Backup**: Always backup before applying migrations
+
+### References
+- See `docs/architecture/data-model.md` for detailed migration plan and examples
+- See `docs/architecture/glossary.md` for versioning conventions
+
+### PostgreSQL in Kubernetes
+Liquibase migrations are integrated into the PostgreSQL StatefulSet deployment:
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql-primary
+spec:
+  serviceName: postgresql-primary
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: postgresql
+        image: postgres:15
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: migrations
+          mountPath: /docker-entrypoint-initdb.d
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: password
+      volumes:
+      - name: migrations
+        configMap:
+          name: liquibase-migrations
+```
+
+### CI/CD Integration
+Migrations are applied during deployment pipeline:
+
+1. **Build Stage**: Liquibase changelog files are packaged into ConfigMap
+2. **Deploy Stage**: ConfigMap is mounted to PostgreSQL pod
+3. **Startup**: PostgreSQL automatically runs migrations on first start
+4. **Rollback**: If migration fails, deployment is rolled back
+
+```yaml
+# Example GitLab CI/CD stage
+migrate-database:
+  stage: migrate
+  script:
+    - ./gradlew liquibaseUpdate
+  artifacts:
+    paths:
+      - build/reports/liquibase/
+```
+
+---
+
 ## Заключение
 
 Диаграмма развёртывания показывает MVP-архитектуру (8 сервисов):
@@ -813,7 +944,7 @@ graph TD
   - payment-service (2 пода)
   - communication-service (2 пода)
   - platform-service (2 пода)
-- **Primary-Replica PostgreSQL** для отказоустойчивости
+- **Primary-Replica PostgreSQL with Liquibase migrations** для отказоустойчивости и управления схемой
 - **Redis Cluster** для кэширования и сессий
 - **Elasticsearch Cluster** для полнотекстового поиска
 - **Kafka Cluster** для асинхронной коммуникации
