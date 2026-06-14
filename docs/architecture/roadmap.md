@@ -20,6 +20,14 @@
 - **communication-service** — уведомления и сообщения (Notifications+Messaging)
 - **platform-service** — платформенные функции (Users+Moderation+Reviews+Analytics+Admin)
 
+**ВАЖНО:** Роли пользователей хранятся исключительно в Keycloak. JWT токен содержит список ролей для авторизации во всех сервисах.
+
+**Auth Service:** В новой архитектуре auth-service служит оберткой над Keycloak для:
+- Синхронизации пользователей между Keycloak и PostgreSQL
+- Кэширования JWT токенов в Redis для производительности
+- Вспомогательных операций (logout, view profile)
+- Роли пользователей не хранятся в PostgreSQL В PostgreSQL нет таблиц для хранения ролей.
+
 ---
 
 ## Текущее состояние (T0)
@@ -46,12 +54,42 @@
 
 **Цель:** Создать базовую инфраструктуру и реализовать MVP ядро (8 сервисов)
 
-#### Неделя 1: Подготовка
+#### Неделя 1: Подготовка и миграции
 - [ ] Создать Dockerfile для API Gateway, Auth, Catalog, Order, Search, Payment, Communication, Platform
 - [ ] Настроить Liquibase миграции для всех схем
+  - [ ] Создать master changelog файлы (master.xml или master.yaml) для каждого сервиса
+  - [ ] Объединить все SQL миграции в директорию v1.0.0 для каждого сервиса
+  - [ ] Проверить порядок применения миграций
 - [ ] Создать базовую структуру для всех сервисов (Gradle, main class, application.yml)
 - [ ] Создать README.md для каждого сервиса
 - [ ] Настроить GitLab CI/CD пайплайны
+
+**Примечание по миграциям:**
+Для MVP используется структура, где каждый сервис имеет свою директорию миграций `v1.0.0`. Это соответствует паттерну "Database per Service". Пример структуры:
+```
+services/
+├── auth-service/
+│   └── src/main/resources/db/changelog/
+│       ├── master.yaml          # Master changelog (YAML формат)
+│       └── v1.0.0/
+│           ├── 01-create-users.sql
+│           ├── 02-create-oauth-providers.sql
+│           └── ...
+└── platform-service/
+    └── src/main/resources/db/changelog/
+        ├── master.yaml          # Master changelog (YAML формат)
+        └── v1.0.0/
+            └── ...
+```
+
+**Примечание по конфигурации:**
+В `application.yml` каждого сервиса указать:
+```yaml
+spring:
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/master.xml
+```
 
 #### Неделя 2: Core Services
 - [ ] Реализовать Auth Service (JWT, OAuth2, Keycloak)

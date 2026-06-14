@@ -151,28 +151,25 @@ graph TD
         A[KeycloakIntegrationService]
         B[TokenService]
         C[UserService]
-        D[RoleService]
-        E[PermissionService]
-        F[SessionService]
-        G[CacheService]
+        D[ServiceTokenService]
     end
     
     A --> B
     B --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> Redis[Redis Cluster with Sentinel]
+    A --> D
+    B --> Redis[Redis Cluster with Sentinel]
     C --> PostgreSQL[PostgreSQL - users]
+    A --> Keycloak[Keycloak]
     
     classDef auth fill:#9C27B0,stroke:#333,stroke-width:1px,color:white;
     classDef component fill:#2196F3,stroke:#333,stroke-width:1px,color:white;
     classDef storage fill:#4CAF50,stroke:#333,stroke-width:1px,color:white;
     classDef redis fill:#FF9800,stroke:#333,stroke-width:1px,color:white;
+    classDef external fill:#FF5722,stroke:#333,stroke-width:1px,color:white;
     
-    class A,B,C,D,E,F,G auth
+    class A,B,C,D auth
     class Redis,PostgreSQL storage
+    class Keycloak external
 ```
 
 ---

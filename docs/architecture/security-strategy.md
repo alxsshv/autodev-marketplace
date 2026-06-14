@@ -16,11 +16,19 @@
 
 ### 1.1 Для MVP (без TLS)
 
-**Service Account Tokens через Keycloak:**
+**Keycloak как единственный источник правды для ролей:**
 - Каждый сервис имеет свой service account в Keycloak
 - При запуске сервис получает JWT token от Keycloak
 - Для межсервисных вызовов сервисы предъявляют свои токены
-- Получающий сервис валидирует токен через Keycloak или кэш в Redis
+- Получающий сервис валидирует токен через Redis кэш (или Keycloak)
+- Роли пользователей хранятся только в Keycloak и передаются в JWT токене
+
+**Auth Service (обертка над Keycloak):**
+- Auth Service не управляет ролями в PostgreSQL (таблицы auth.roles удалены)
+- Auth Service служит для синхронизации пользователей между Keycloak и PostgreSQL
+- Кэширование JWT токенов и публичных ключей Keycloak в Redis
+- **Механизм revoked tokens:** Redis-only подход с TTL = expires_at - current_time (для MVP)
+- Вспомогательные операции: logout, view profile, get user by ID
 
 **Пример использования (Spring Security):**
 ```java
@@ -170,6 +178,12 @@ public class ServiceAccountService {
 | MODERATOR | Модератор контента | platform-service, communication-service |
 | ADMIN | Администратор системы | auth-service, platform-service, admin-service |
 
+**ВАЖНО:** Роли пользователей хранятся исключительно в Keycloak. JWT токен содержит список ролей для авторизации во всех сервисах. В PostgreSQL нет таблиц для хранения ролей (`auth.roles`, `auth.permissions`, `auth.role_permissions` удалены).
+
+**Маппинг:** `realm_access.roles` → Spring Security `ROLE_*`
+
+**Подробнее:** [security/rbac.md](security/rbac.md)
+
 ### 3.2 Применение RBAC по сервисам
 
 #### Auth Service
@@ -179,7 +193,9 @@ public class ServiceAccountService {
 | BUYER | login, refresh, logout, view profile |
 | SELLER | login, refresh, logout, view profile |
 | MODERATOR | login, refresh, logout, view profile |
-| ADMIN | все права BUYER + управление пользователями и ролями |
+| ADMIN | login, refresh, logout, view profile, manage users |
+
+**ВАЖНО:** Управление ролями осуществляется ТОЛЬКО через Keycloak Admin Console или Keycloak Admin API. Auth Service НЕ предоставляет endpoints для управления ролями. Роли хранятся исключительно в Keycloak и не дублируются в PostgreSQL.
 
 **Пример аннотации:**
 ```java
@@ -190,6 +206,9 @@ public UserDto getUserById(@PathVariable Long id) {
 }
 ```
 
+**Примеры:**
+- Всё по RBAC: [security/rbac.md](security/rbac.md)
+
 #### Platform Service
 
 | Роль | Права |
@@ -197,7 +216,9 @@ public UserDto getUserById(@PathVariable Long id) {
 | BUYER | view own profile, manage favorites, search |
 | SELLER | manage store, manage own products, view analytics |
 | MODERATOR | moderate content, view reports |
-| ADMIN | system configuration, user management |
+| ADMIN | system configuration, role management via Keycloak |
+
+**Примечание:** Роли проверяются через JWT токен (Keycloak). Пользователи управляются только через Keycloak Admin Console/API.
 
 #### Order Service
 
@@ -206,7 +227,9 @@ public UserDto getUserById(@PathVariable Long id) {
 | BUYER | create orders, view own orders |
 | SELLER | view orders for own products, update order status |
 | MODERATOR | view all orders |
-| ADMIN | full access |
+| ADMIN | full access, role management via Keycloak |
+
+**Примечание:** Роли проверяются через JWT токен (Keycloak). Пользователи управляются только через Keycloak Admin/API.
 
 #### Catalog Service
 
@@ -215,7 +238,9 @@ public UserDto getUserById(@PathVariable Long id) {
 | BUYER | view products, search |
 | SELLER | create/edit own products |
 | MODERATOR | view all products, flag inappropriate |
-| ADMIN | full access, category management |
+| ADMIN | full access, category management, role management via Keycloak |
+
+**Примечание:** Роли проверяются через JWT токен (Keycloak). Пользователи управляются только через Keycloak Admin/API.
 
 #### Payment Service
 
@@ -224,6 +249,10 @@ public UserDto getUserById(@PathVariable Long id) {
 | BUYER | process payment for own orders |
 | SELLER | view payment history for own products |
 | ADMIN | full access, fraud detection |
+
+**Примечание:** Роли проверяются через JWT токен (Keycloak). Пользователи управляются только через Keycloak Admin/API.
+
+**Примечание:** Роли проверяются через JWT токен (Keycloak). Подробнее: [security/rbac.md](security/rbac.md)
 
 #### Communication Service
 
@@ -234,6 +263,10 @@ public UserDto getUserById(@PathVariable Long id) {
 | MODERATOR | view all messages for moderation |
 | ADMIN | full access |
 
+**Примечание:** Роли проверяются через JWT токен (Keycloak). Пользователи управляются только через Keycloak Admin/API.
+
+**Примечание:** Роли проверяются через JWT токен (Keycloak). Подробнее: [security/rbac.md](security/rbac.md)
+
 ---
 
 ## 4. План аудита безопасности
@@ -242,7 +275,9 @@ public UserDto getUserById(@PathVariable Long id) {
 
 - Логи аутентификации (неудачные попытки входа)
 - Статистика по rate limiting
-- Изменения в RBAC (новые роли, изменения прав)
+- Изменения в RBAC (новые роли, изменения прав) через Keycloak
+
+**Примечание:** Изменения в RBAC происходят только в Keycloak. Подробнее: [security/rbac.md](security/rbac.md)
 
 ### 4.2 Ежемесячные аудиты
 
@@ -310,8 +345,11 @@ public UserDto getUserById(@PathVariable Long id) {
 
 #### A07:2021 – Identification and Authentication Failures
 - JWT expiration (12 часов для access token, 7 дней для refresh token)
+- **Механизм revoked tokens:** Redis-only подход с TTL = expires_at - current_time (для MVP)
 - Rate limiting на login (5 попыток в минуту)
 - Password policies (минимум 8 символов, цифры, спецсимволы)
+- RBAC через `realm_access.roles` (BUYER, SELLER, MODERATOR, ADMIN)
+- Подробнее: [security/rbac.md](security/rbac.md), [security/revoked-tokens.md](security/revoked-tokens.md)
 
 #### A08:2021 – Software and Data Integrity Failures
 - Signing docker images (Notary)
@@ -370,6 +408,7 @@ public UserDto getUserById(@PathVariable Long id) {
 - **TLS 1.3** для внешних API
 - **RBAC** для детального контроля доступа
 - **BCrypt/PBKDF2** для шифрования паролей
+- **Механизм revoked tokens** через Redis-only подход (TTL = expires_at - current_time) — защита от использования отзыванных токенов
 - **План аудита** от еженедельных до квартальных проверок
 - **OWASP Top 10** compliance
 - **Incident response** процедура для быстрого реагирования
@@ -385,3 +424,5 @@ public UserDto getUserById(@PathVariable Long id) {
 - [Keycloak Documentation](https://www.keycloak.org/documentation)
 - [OWASP Security Cheat Sheets](https://cheatsheetseries.owasp.org/)
 - [TLS Best Practices](https://tls.mbed.org/best-practices)
+- [JWT RFC 7519](https://tools.ietf.org/html/rfc7519)
+- [JWT Structure](security/jwt-structure.md)

@@ -134,6 +134,47 @@ openapi-generator-cli validate \
 - Пределы настроены в зависимости от типа запроса
 - Превышение лимита возвращает `429 Too Many Requests`
 
+## Соглашения по API
+
+### Base URL
+
+- **Production:** `https://api.autodev.marketplace`
+- **Docker:** `http://<service-name>:8080`
+- **Local:** `http://localhost:<port>`
+
+### Versioning
+
+- URL versioning: `/api/v1/...`
+- Header versioning (альтернатива): `X-API-Version: 1`
+
+### Authentication
+
+- JWT Authorization header: `Authorization: Bearer <token>`
+- Входящие запросы проверяются API Gateway
+- Исходящие вызовы между сервисами передают JWT токен
+
+### Rate Limiting
+
+- API Gateway применяет rate limiting к входящим запросам
+- Пределы настроены в зависимости от типа запроса
+- Превышение лимита возвращает `429 Too Many Requests`
+
+### Управление профилем пользователя
+
+**Ответственность сервисов:**
+
+| Тип данных | Сервис | Endpoint | RBAC |
+|-----------|--------|----------|------|
+| Аутентификационные данные (email, enabled) | **Keycloak** | Keycloak Admin API | ADMIN |
+| Бизнес-данные профиля (first_name, last_name, phone) | **Platform Service** | `GET/PUT /api/v1/platform/users/profile` | BUYER, SELLER |
+| Получение данных текущего пользователя из кэша | **Auth Service** | `GET /api/v1/auth/me` | BUYER, SELLER, MODERATOR, ADMIN |
+| Получение пользователя по ID | **Auth Service** | `GET /api/v1/auth/users/{id}` | ADMIN (для синхронизации с PostgreSQL) |
+
+**ВАЖНО:**
+- Auth Service **не предоставляет** endpoints для обновления данных профиля
+- Обновление бизнес-данных осуществляется только через Platform Service
+- Аутентификационные данные управляются только через Keycloak Admin API
+
 ### Статус коды
 
 | Код | Описание |
