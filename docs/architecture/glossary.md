@@ -63,7 +63,9 @@
 | **Docker** | Платформа для контейнеризации приложений |
 | **Kubernetes** | Оркестратор контейнеров |
 | **Consul** | Service Discovery и KV-store от HashiCorp |
-| **Keycloak** | Централизованная система аутентификации и авторизации |
+| **Keycloak** | Централизованная система аутентификации и авторизации (единственный источник правды для ролей) |
+| **Database per Service** | Паттерн, при котором каждый микросервис имеет свою базу данных |
+| **Single Source of Truth** | Ключевой принцип: Keycloak является единственным источником правды для ролей пользователей (в PostgreSQL нет таблиц auth.roles, auth.permissions, auth.role_permissions) |
 | **MinIO** | Объектное хранилище, совместимое с AWS S3 |
 | **Prometheus** | Система сбора и хранения метрик |
 | **Grafana** | Инструмент для визуализации метрик и логов |
@@ -89,7 +91,22 @@
 
 **Примечание по схеме `auth`:** Схема `auth` содержит только аутентификационные данные пользователей (таблица `users` с полями: id, keycloak_user_id, email, enabled). Все бизнес-данные пользователя хранятся в схеме `platform_service.users`.
 
+**ВАЖНО:** Роли пользователей хранятся исключительно в Keycloak. В PostgreSQL нет таблиц для хранения ролей (`auth.roles`, `auth.permissions`, `auth.role_permissions` не создаются для MVP).
+
+**ВАЖНО:** В таблице `auth.users` НЕТ поля `role`. Роли хранятся только в Keycloak и передаются в JWT токене.
+
+**ВАЖНО:** Auth Service НЕ предоставляет endpoints для управления ролями. Управление ролями осуществляется только через Keycloak Admin Console (http://localhost:8090/admin) или Keycloak Admin API (http://localhost:8090/admin/realms/autodev/roles).
+
 **Примечание:** Search Service не использует PostgreSQL напрямую (только Elasticsearch индексы), API Gateway не использует БД (только маршрутизация)
+
+#### Liquibase миграции
+- **Формат:** `services/{service-name}/src/main/resources/db/changelog/v{version}/`
+- **Структура:** Каждый сервис имеет свою директорию миграций с версией `v1.0.0` для MVP
+- **Master changelog:** `services/{service-name}/src/main/resources/db/changelog/master.yaml` (YAML формат)
+- **Миграции:** SQL файлы в директории `v1.0.0/`
+- **Пример:** `services/auth-service/src/main/resources/db/changelog/v1.0.0/03-06-2026-create-table-users.sql`
+
+**Примечание:** Использование master changelog файлов позволяет объединить все миграции для каждого сервиса в одну логическую версию `v1.0.0` для MVP. Для master changelog используется YAML формат из-за его читаемости и компактности.
 
 #### Таблицы
 - **Формат:** `schema.table_name` (например, `auth.users`, `order_service.orders`)
@@ -139,12 +156,22 @@ autodev-marketplace/
 ├── services/                    # Микросервисы
 │   ├── api-gateway/            # API Gateway
 │   ├── auth-service/           # Аутентификация
+│   │   └── src/main/resources/db/changelog/
+│   │       ├── master.xml      # Главный файл миграции для auth-service
+│   │       └── v1.0.0/         # Версия миграций для MVP
+│   │           ├── 01-create-users.sql
+│   │           ├── 02-create-oauth-providers.sql
+│   │           └── ...
 │   ├── catalog-service/        # Каталог товаров
 │   ├── order-service/          # Заказы
 │   ├── search-service/         # Поиск
 │   ├── payment-service/        # Оплата
 │   ├── communication-service/  # Коммуникация
 │   ├── platform-service/       # Платформа (Users + Moderation + Reviews + Analytics + Admin)
+│   │   └── src/main/resources/db/changelog/
+│   │       ├── master.xml      # Главный файл миграции для platform-service
+│   │       └── v1.0.0/         # Версия миграций для MVP
+│   │           └── ...
 │   └── ...
 ├── docs/                        # Документация
 │   └── architecture/           # Архитектурная документация
@@ -153,12 +180,17 @@ autodev-marketplace/
 │       └── ...
 ├── infrastructure/              # Инфраструктура
 │   ├── service-db/
+│   │   └── init/               # Инициализация БД для Docker
+│   │       └── init-schemas.sql
 │   ├── prometheus/
 │   ├── loki/
 │   └── ...
 ├── docker-compose.yaml          # Локальная инфраструктура
 └── build.gradle.kts             # Корневой Gradle файл
 ```
+
+**Примечание по миграциям:**
+Для MVP используется структура, где каждый сервис имеет свою директорию миграций с версией `v1.0.0`. Это соответствует паттерну "Database per Service" в микросервисной архитектуре. Каждая директория `v1.0.0` содержит набор SQL файлов, которые применяются в алфавитном порядке через master changelog файл.
 
 #### Структура микросервиса
 ```
@@ -175,6 +207,9 @@ service-name/
 │   │   └── resources/
 │   │       ├── application.yml
 │   │       ├── db/changelog/
+│   │       │   ├── master.yaml     # Главный файл миграции (YAML формат)
+│   │       │   └── v1.0.0/         # Версия миграций для MVP
+│   │       │       └── *.sql       # SQL файлы миграций
 │   │       └── liquibase/
 │   └── test/
 │       └── java/com/autodev/servicename/

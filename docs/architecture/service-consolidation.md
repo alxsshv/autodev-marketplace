@@ -69,6 +69,10 @@
 
 **Итого для MVP: 8 сервисов**
 
+**Примечание:** В новой архитектуре:
+- **Keycloak** — единственный источник правды для ролей
+- **Auth Service** — обертка над Keycloak для синхронизации пользователей и кэширования
+
 ---
 
 ## Подробное описание консолидаций
@@ -173,7 +177,9 @@
 - Таблицы в PostgreSQL: `platform_service.users`, `platform_service.profiles`, `platform_service.loyalty`, `platform_service.moderation`, `platform_service.reviews`, `platform_service.analytics`, `platform_service.admin`, `platform_service.marketing`
 - События Kafka: `platform.user.registered`, `platform.review.moderated`, `platform.analytics.updated`
 
-**Риски:**
+**ВАЖНО:** Роли пользователей хранятся исключительно в Keycloak. В PostgreSQL нет таблиц для хранения ролей.
+
+**Риски:****
 - ⚠️ **Средний:** Платформа может быть большой — изолировать модули через пакеты Java
 - ✅ **Низкий:** Кэширование профилей — в Redis, как и раньше
 

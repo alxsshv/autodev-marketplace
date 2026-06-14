@@ -57,9 +57,6 @@ databaseChangeLog:
           file: v1.0.0/07-06-2026-create-index-auth.users-keycloak-user-id.sql
           relativeToChangelogFile: true
     - include:
-          file: v1.0.0/07-06-2026-create-index-auth.users-owner-id.sql
-          relativeToChangelogFile: true
-    - include:
           file: v1.0.0/07-06-2026-insert-initial-roles.sql
           relativeToChangelogFile: true
     - include:

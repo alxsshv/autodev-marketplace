@@ -1,8 +1,8 @@
 # AutoDev Marketplace — Политика взаимодействия сервисов
 
-**Версия документа:** 1.1  
+**Версия документа:** 1.3  
 **Дата создания:** 2026-06-03  
-**Последнее обновление:** 2026-06-13
+**Последнее обновление:** 2026-06-14
 
 ---
 
@@ -12,17 +12,38 @@
 
 Каждый микросервис AutoDev Marketplace имеет уникальный service account в Keycloak и использует JWT токены для аутентификации при межсервисных вызовах.
 
-#### Service Account Token
+#### JWT токен пользователя
+```json
+{
+  "sub": "user@example.com",
+  "iss": "https://keycloak.autodev.local",
+  "aud": ["api-gateway", "auth-service", "catalog-service"],
+  "realm_access": {
+    "roles": ["BUYER", "SELLER"]
+  },
+  "exp": 1720000000,
+  "iat": 1719996400
+}
+```
+
+**ВАЖНО:**
+- Роли пользователя (BUYER, SELLER, MODERATOR, ADMIN) хранятся только в Keycloak
+- При аутентификации Keycloak выдаёт JWT токен с ролями
+- Все сервисы проверяют роли из JWT токена
+- В PostgreSQL нет таблиц для хранения ролей (`auth.roles`, `auth.permissions`, `auth.role_permissions`)
+
+#### JWT токен сервиса
 ```
 {
   "sub": "auth-service",
   "iss": "https://keycloak.autodev.local",
   "aud": ["api-gateway", "catalog-service", "order-service"],
-  "roles": ["SERVICE_AUTH", "SERVICE_PLATFORM"],
   "exp": 1720000000,
   "iat": 1719996400
 }
 ```
+
+**Примечание:** Service tokens не содержат ролей. Роли пользователей хранятся в Keycloak и попадают в JWT токен при аутентификации. В PostgreSQL нет таблиц для хранения ролей.
 
 #### Генерация токена (Java)
 ```java
@@ -172,6 +193,8 @@ public class ServiceTokenFilter extends OncePerRequestFilter {
   "iat": 1719996400
 }
 ```
+
+**Примечание:** Роли сервисов (SERVICE_AUTH, SERVICE_PLATFORM) отличаются от ролей пользователей (BUYER, SELLER, MODERATOR, ADMIN). Роли пользователей хранятся в Keycloak и попадают в JWT токен при аутентификации. В PostgreSQL нет таблиц для хранения ролей.
 
 #### Генерация токена (Java)
 ```java
@@ -418,32 +441,53 @@ public interface AuthClient {
 ```
 
 **Примеры:**
-- `auth.user_registered`
-- `platform.user_profile_updated`
-- `catalog.product_created`
-- `order.order_created`
-- `payment.payment_completed`
+- `auth.user.registered` — новый пользователь (создание в Keycloak)
+- `auth.user.updated` — обновление аутентификационных данных
+- `auth.user.deleted` — удаление пользователя (из Keycloak)
+- `auth.user.enabled` — пользователь активирован (из Keycloak)
+- `auth.user.disabled` — пользователь деактивирован (из Keycloak)
+- `platform.user_profile_updated` — обновление профиля
+- `catalog.product.created` — новый товар
+- `order.order.created` — новый заказ
+- `payment.payment.completed` — оплата завершена
 
-#### Структура события
+#### Структура события для синхронизации enabled статуса
 ```json
 {
   "id": "uuid",
-  "type": "user.profile_updated",
+  "type": "auth.user.enabled" или "auth.user.disabled",
   "timestamp": "2026-06-03T10:30:00Z",
   "version": "1.0",
   "payload": {
     "user_id": 123,
-    "email": "user@example.com",
-    "first_name": "John",
-    "last_name": "Doe"
+    "keycloak_user_id": "123e4567-e89b-12d3-a456-426614174000",
+    "enabled": true
   },
   "metadata": {
-    "source_service": "platform-service",
-    "source_host": "platform-service-1",
+    "source_service": "auth-service",
+    "source_host": "auth-service-1",
     "correlation_id": "abc-123"
   }
 }
 ```
+
+### ⚠️ ВАЖНО: Правило отсутствия поля role
+
+**Поле `role` НЕ ДОЛЖНО и НЕ БУДЕТ присутствовать в payload любого Kafka события!**
+
+**Почему?**
+- Роли пользователей хранятся ТОЛЬКО в Keycloak
+- При аутентификации JWT токен содержит список ролей
+- В PostgreSQL нет таблиц `auth.roles`, `auth.permissions`, `auth.role_permissions`
+- В `platform_service.user_profiles` нет поля `role` (удалено в миграции v0.9.0)
+
+**Что должно содержаться в payload событий:**
+- ✅ Только аутентификационные данные (email, enabled status, keycloak_user_id, created_at)
+- ✅ Только бизнес-данные профиля (first_name, last_name, phone, verified, avatar_url и т.д.)
+
+**Что НЕ должно содержаться в payload событий:**
+- ❌ Поле `role` или `roles` — оно никогда не передается между сервисами через Kafka
+- ❌ Структура `realm_access.roles` — это только для JWT токенов Keycloak
 
 #### Key для сообщений
 ```
@@ -834,3 +878,159 @@ management:
 - **Idempotency** для критичных операций
 - **Transactional Outbox** для надёжной доставки событий
 - **Saga Pattern** для распределённых транзакций
+
+---
+
+## Синхронизация статуса enabled
+
+### Проблема
+
+Статус `enabled` пользователя может быть изменен:
+1. В Keycloak через Admin Console или API
+2. В PostgreSQL через auth-service endpoints
+
+Требуется синхронизация статуса между Keycloak и PostgreSQL.
+
+### Решение
+
+Использование Kafka событий `auth.user.enabled` и `auth.user.disabled`:
+
+```
+Keycloak (enabled=true/false)
+    |
+    v (Webhook/Event)
+    |
+auth-service
+    |
+    v (publish event)
+    |
+Kafka topic: auth.user.enabled / auth.user.disabled
+    |
+    v (subscribe)
+    |
+Platform Service
+    |
+    v
+PostgreSQL (auth.users.enabled updated)
+```
+
+**Примечание:** Kafka события являются приоритетной стратегией для MVP. Periodic sync job используется как backup механизм (опционально).
+
+### Событие
+
+```json
+{
+  "id": "uuid",
+  "type": "auth.user.enabled" или "auth.user.disabled",
+  "timestamp": "2026-06-03T10:30:00Z",
+  "version": "1.0",
+  "payload": {
+    "user_id": 123,
+    "keycloak_user_id": "123e4567-e89b-12d3-a456-426614174000",
+    "enabled": true
+  },
+  "metadata": {
+    "source_service": "auth-service",
+    "source_host": "auth-service-1",
+    "correlation_id": "abc-123"
+  }
+}
+```
+
+### Обработка в Platform Service
+
+```java
+@Service
+public class UserStatusSyncService {
+    
+    @KafkaListener(
+        topics = "auth.user.enabled",
+        groupId = "platform-service-group"
+    )
+    public void handleUserEnabled(String payload) {
+        UserStatusEvent event = objectMapper.readValue(payload, UserStatusEvent.class);
+        
+        authRepository.updateEnabled(event.getUserId(), true);
+        
+        log.info("User {} enabled via Keycloak event", event.getUserId());
+    }
+    
+    @KafkaListener(
+        topics = "auth.user.disabled",
+        groupId = "platform-service-group"
+    )
+    public void handleUserDisabled(String payload) {
+        UserStatusEvent event = objectMapper.readValue(payload, UserStatusEvent.class);
+        
+        authRepository.updateEnabled(event.getUserId(), false);
+        
+        log.info("User {} disabled via Keycloak event", event.getUserId());
+    }
+}
+```
+
+### Альтернативный подход: Periodic Sync Job
+
+Periodic sync job используется как backup механизм (опционально) в случае сбоя Kafka:
+
+```java
+@Service
+public class UserStatusSyncService {
+    
+    @Scheduled(cron = "0 */10 * * * ?") // Каждые 10 минут
+    public void syncEnabledStatus() {
+        List<User> users = keycloakService.getAllUsers();
+        
+        for (User user : users) {
+            authRepository.findByKeycloakUserId(user.getId())
+                .ifPresent(authUser -> {
+                    if (authUser.isEnabled() != user.isEnabled()) {
+                        authUser.setEnabled(user.isEnabled());
+                        authRepository.save(authUser);
+                        
+                        log.info("Synchronized enabled status for user: {} (keycloak: {}, db: {})",
+                            authUser.getEmail(), user.isEnabled(), authUser.isEnabled());
+                    }
+                });
+        }
+    }
+}
+```
+
+### Метрики
+
+| Метрика | Описание | Тип |
+|---------|----------|-----|
+| `user_status_sync_total` | Количество синхронизаций | Counter |
+| `user_status_sync_enabled` | Активированные пользователи | Counter |
+| `user_status_sync_disabled` | Деактивированные пользователи | Counter |
+| `user_status_sync_errors` | Ошибки синхронизации | Counter |
+
+### Рекомендация
+
+Для MVP использовать **Kafka события** (стратегичнее и менее нагрузочно). Для production добавить **periodic sync job** как backup механизм.
+
+---
+
+## Webhook события от Keycloak
+
+Keycloak отправляет webhook события в Auth Service со следующими названиями:
+
+| Название события | Описание |
+|------------------|----------|
+| `user_created` | Создание нового пользователя |
+| `user_updated` | Обновление данных пользователя |
+| `user_enabled` | Активация пользователя (изменение статуса enabled=true) |
+| `user_disabled` | Деактивация пользователя (изменение статуса enabled=false) |
+| `user_deleted` | Удаление пользователя |
+
+**Важно:** Все названия webhook событий пишутся в формате snake_case с маленькими буквами.
+
+Эти события настраиваются в Keycloak через **Events Provider** → **HTTP Events Provider** в разделе **Enabled Events**.
+
+Kafka события (внутри системы) используют другой формат названий:
+- `auth.user.registered` (соответствует `user_created`)
+- `auth.user.updated` (соответствует `user_updated`)
+- `auth.user.enabled` (соответствует `user_enabled`)
+- `auth.user.disabled` (соответствует `user_disabled`)
+- `auth.user.deleted` (соответствует `user_deleted`)

@@ -16,8 +16,8 @@
 
 ```mermaid
 erDiagram
-    auth__users ||--|| platform_service__users : "1:1"
-    auth__users ||--|| platform_service__loyalty_accounts : "1:1"
+    auth__users ||--o{ platform_service__user_profiles : "1:N"
+    auth__users ||--o{ platform_service__loyalty_accounts : "1:N"
     auth__users ||--o{ platform_service__search_history : "1:N"
     auth__users ||--o{ platform_service__view_history : "1:N"
     auth__users ||--o{ platform_service__favorite_items : "1:N"
@@ -56,6 +56,13 @@ erDiagram
     communication_service__messages }|--|| auth__users : "to_user"
 ```
 
+**ВАЖНО:**
+- Роли пользователей хранятся исключительно в Keycloak
+- При аутентификации JWT токен содержит список ролей
+- В PostgreSQL нет таблиц `auth.roles`, `auth.permissions`, `auth.role_permissions`
+- В `platform_service.user_profiles` нет поля `role` (удалено в миграции v0.9.0)
+- Связь между `auth.users` и `platform_service.users` осуществляется по `user_id` FK
+
 ---
 
 ## Физическая модель данных
@@ -73,18 +80,34 @@ erDiagram
 
 **Индексы:**
 - `idx_auth_users_keycloak` ON (keycloak_user_id)
+- `idx_auth_users_email` ON (email)
 
 **Ограничения:**
 
-**Примечание:** Эта таблица содержит только аутентификационные данные. Все бизнес-данные пользователя хранятся в `platform_service.users`. Связь 1:1 обеспечивается через внешний ключ `platform_service.users.user_id` → `auth.users.id`.
+**ВАЖНО:** Эта таблица содержит только аутентификационные данные. Все бизнес-данные пользователя хранятся в `platform_service.user_profiles`.
 
-#### Таблица: `roles`
-| Поле | Тип | Описание | Индекс | Ограничения |
-|------|-----|----------|--------|-------------|
-| id | BIGSERIAL | Первичный ключ | PRIMARY KEY | NOT NULL |
-| name | VARCHAR(50) | Название роли | UNIQUE | NOT NULL |
-| description | VARCHAR(255) | Описание роли | | NULL |
-| created_at | TIMESTAMP | Дата создания | | NOT NULL |
+**ВАЖНО:** Роли пользователей хранятся исключительно в Keycloak. В PostgreSQL нет таблиц для хранения ролей (`auth.roles`, `auth.permissions`, `auth.role_permissions` удалены).
+
+**ВАЖНО:** В таблице `auth.users` НЕТ поля `role`. Роли хранятся только в Keycloak и передаются в JWT токене.
+
+---
+
+#### Таблица: `revoked_tokens` (УДАЛЕНА для MVP)
+
+**УДАЛЕНА для MVP.**
+
+Таблица `auth.revoked_tokens` больше не используется. Все revoked tokens хранятся только в Redis.
+
+### Причина удаления:
+- Упрощение архитектуры для MVP
+- Redis достаточен для хранения revoked tokens с TTL
+- Нет необходимости в долгосрочном хранении revoked tokens
+- Снижение сложности синхронизации между Redis и PostgreSQL
+
+### Альтернатива для production:
+Если в буду щем потребуется долгосрочное хранение revoked tokens для аудита, можно добавить:
+1. Redis Streams для хранения истории logout операций
+2. Отдельную таблицу `auth.revoked_tokens_audit` для аудита (без требования TTL)
 
 ---
 
@@ -99,7 +122,6 @@ erDiagram
 | first_name | VARCHAR(255) | Имя пользователя | | NULL |
 | last_name | VARCHAR(255) | Фамилия пользователя | | NULL |
 | phone | VARCHAR(50) | Телефон | | NULL |
-| role | VARCHAR(50) | Роль: BUYER, SELLER | | NOT NULL |
 | verified | BOOLEAN | Верифицирован ли пользователь | | NOT NULL |
 | avatar_url | VARCHAR(255) | URL аватара | | NULL |
 | store_name | VARCHAR(255) | Название магазина (для продавцов) | | NULL |
@@ -112,8 +134,6 @@ erDiagram
 **Индексы:**
 - `idx_platform_users_keycloak_user_id` ON (keycloak_user_id)
 - `idx_platform_users_email` ON (email)
-- `idx_platform_users_role` ON (role)
-- `idx_platform_users_store` ON (store_name)
 - `idx_platform_users_verified` ON (verified)
 - `idx_platform_users_verification_status` ON (verification_status)
 
@@ -121,6 +141,8 @@ erDiagram
 - `fk_platform_users_user_id` FOREIGN KEY (user_id) REFERENCES auth.users(id)
 
 **Примечание:** Эта таблица содержит все бизнес-данные пользователя. Ссылка `user_id` связывает её с `auth.users.id` для аутентификации.
+- **ВАЖНО:** Роли теперь хранятся только в Keycloak и не дублируются в PostgreSQL
+- **УДАЛЕНО:** Поле `role` в таблице `users` (было `role VARCHAR(50) NOT NULL`). См. миграцию v0.9.0.
 
 #### Таблица: `moderation_items`
 | Поле | Тип | Описание | Индекс | Ограничения |
@@ -670,14 +692,14 @@ erDiagram
 **Примечание:** Согласно новой архитектуре, `auth.users` содержит только аутентификационные данные, а `platform_service.users` содержит все бизнес-данные пользователя. При регистрации создается запись в `auth.users` с последующим созданием профиля в `platform_service.users`.
 
 #### Platform Service → Auth Service
-**Событие:** `platform.user.profile_created` (Kafka)
+**Событие:** `auth.user.profile_created` (Kafka)
 **Действие:** Создание аутентификационной записи в `auth.users` для новой компании/подразделения
 **Стратегия:** Event-driven, eventual consistency
 
 **Примечание:** Для служебных учетных записей (например, для компаний) может создаваться аутентификационная запись в `auth.users`.
 
 #### Platform Service → Communication Service
-**Событие:** `platform.user.registered` (Kafka)
+**Событие:** `auth.user.registered` (Kafka)
 **Действие:** Отправка welcome email
 **Стратегия:** Event-driven, at-least-once delivery
 
@@ -757,11 +779,82 @@ TYPE: JSON
 
 ### План миграций
 
-| Версия | Описание | Скрипт |
-|--------|----------|--------|
-| `v1.0.0` | Первичная схема | `v1.0.0/03-06-2026-create-tables.sql` |
-| `v1.1.0` | Добавление индексов | `v1.1.0/10-06-2026-add-indexes.sql` |
-| `v1.2.0` | Обновление структуры | `v1.2.0/15-06-2026-update-schema.sql` |
+**Объяснение версионирования:**
+Для MVP используется структура, где каждый сервис имеет свою директорию миграций с версией `v1.0.0`. Это соответствует паттерну "Database per Service" в микросервисной архитектуре.
+
+| Версия | Сервис | Описание | Скрипт | Дата |
+|--------|--------|----------|--------|------|
+| `v1.0.0` | auth-service | Создание таблиц аутентификации | `v1.0.0/03-06-2026-create-table-users.sql` | 2026-06-03 |
+| `v1.0.0` | auth-service | Создание таблиц OAuth провайдеров | `v1.0.0/05-06-2026-create-table-oauth-providers.sql` | 2026-06-05 |
+| `v1.0.0` | auth-service | Создание таблиц ролей, прав и аудита | `v1.0.0/07-06-2026-create-table-*.sql` (11 файлов) | 2026-06-07 |
+| `v1.0.0` | platform-service | Создание таблицы профилей пользователей | `v1.0.0/07-06-2026-create-table-user-profiles.sql` | 2026-06-07 |
+| `v1.0.0` | platform-service | Добавление индексов для профилей | `v1.0.0/07-06-2026-create-index-*.sql` (3 файла) | 2026-06-07 |
+
+**ВАЖНО:** Все миграции для MVP объединены в версию `v1.0.0`. В будущем при добавлении новых функций будут создаваться новые версии:
+- `v1.1.0` — дополнительные таблицы и изменения
+- `v2.0.0` — breaking changes (майорные изменения схемы)
+
+**Структура директорий миграций:**
+```
+services/
+├── auth-service/
+│   └── src/main/resources/db/changelog/
+│       ├── master.yaml (YAML формат) — главный файл миграции
+│       └── v1.0.0/
+│           ├── 01-create-users.sql
+│           ├── 02-create-oauth-providers.sql
+│           ├── 03-create-roles-tables.sql
+│           └── ...
+└── platform-service/
+    └── src/main/resources/db/changelog/
+        ├── master.yaml (YAML формат) — главный файл миграции
+        └── v1.0.0/
+            ├── 01-create-user-profiles.sql
+            └── ...
+```
+
+**Конфигурация Liquibase в Spring Boot:**
+
+**Для auth-service (application.yml):**
+```yaml
+spring:
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/master.yaml
+```
+
+**Для platform-service (application.yml):**
+```yaml
+spring:
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/master.yaml
+```
+
+**master.yaml пример (для auth-service):**
+```yaml
+databaseChangeLog:
+  - includeAll:
+      path: v1.0.0/
+      relativeToChangelogFile: true
+```
+
+**Порядок применения миграций:**
+Liquibase применяет миграции в алфавитном порядке внутри директории `v1.0.0/` на основе имен файлов. Имена форматируются как:
+```
+<номер>-<дата>-<описание>.sql
+```
+
+Например:
+- `01-create-users.sql` — применяется первым
+- `02-create-oauth-providers.sql` — применяется вторым
+- `03-create-roles-tables.sql` — применяется третьим
+
+**Согласованность документов:**
+- Удаление поля `role` из `platform_service.users` подтверждено в: `system-overview.md`, `security-strategy.md`, `security/rbac.md`
+- Роли пользователей хранятся исключительно в Keycloak и передаются в JWT токене
+- В PostgreSQL не используются таблицы для хранения ролей (`auth.roles`, `auth.permissions`, `auth.role_permissions` не создаются для MVP)
+- Миграции для MVP созданы с учётом архитектурных решений, описанных в `system-overview.md` и `data-model.md`
 
 ### Пример миграции
 ```sql
@@ -787,7 +880,6 @@ CREATE TABLE platform_service.users (
     first_name          VARCHAR(255)   NULL,
     last_name           VARCHAR(255)   NULL,
     phone               VARCHAR(50)    NULL,
-    role                VARCHAR(50)    NOT NULL,
     verified            BOOLEAN        NOT NULL   DEFAULT FALSE,
     avatar_url          VARCHAR(255)   NULL,
     store_name          VARCHAR(255)   NULL,
@@ -801,8 +893,6 @@ CREATE TABLE platform_service.users (
 
 CREATE INDEX idx_platform_users_keycloak_user_id ON platform_service.users(keycloak_user_id);
 CREATE INDEX idx_platform_users_email ON platform_service.users(email);
-CREATE INDEX idx_platform_users_role ON platform_service.users(role);
-CREATE INDEX idx_platform_users_store ON platform_service.users(store_name);
 CREATE INDEX idx_platform_users_verified ON platform_service.users(verified);
 CREATE INDEX idx_platform_users_verification_status ON platform_service.users(verification_status);
 

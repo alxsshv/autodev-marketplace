@@ -33,9 +33,11 @@ Platform Service обеспечивает:
 | Method | Path | Описание | RBAC |
 |--------|------|----------|------|
 | `GET` | `/api/v1/platform/users/profile` | Получение профиля | BUYER, SELLER |
-| `PUT` | `/api/v1/platform/users/profile` | Обновление профиля | BUYER, SELLER |
+| `PUT` | `/api/v1/platform/users/profile` | Обновление профиля (first_name, last_name, phone) | BUYER, SELLER |
 | `GET` | `/api/v1/platform/users/profiles/{userId}` | Получение профиля по ID | BUYER, SELLER |
 | `POST` | `/api/v1/platform/users/verify` | Запрос верификации | BUYER, SELLER |
+
+**ВАЖНО:** Бизнес-данные профиля (first_name, last_name, phone) обновляются через этот сервис. Аутентификационные данные (email, enabled) управляются только через Keycloak Admin API.
 
 ### Store Settings (для продавцов)
 
@@ -155,7 +157,6 @@ dependencies {
 | first_name | VARCHAR(255) | Имя пользователя | | NULL |
 | last_name | VARCHAR(255) | Фамилия пользователя | | NULL |
 | phone | VARCHAR(50) | Телефон | | NULL |
-| role | VARCHAR(50) | Роль: BUYER, SELLER | | NOT NULL |
 | verified | BOOLEAN | Верифицирован ли пользователь | | NOT NULL |
 | avatar_url | VARCHAR(255) | URL аватара | | NULL |
 | store_name | VARCHAR(255) | Название магазина (для продавцов) | | NULL |
@@ -168,8 +169,6 @@ dependencies {
 **Индексы:**
 - `idx_platform_users_keycloak_user_id` ON (keycloak_user_id)
 - `idx_platform_users_email` ON (email)
-- `idx_platform_users_role` ON (role)
-- `idx_platform_users_store` ON (store_name)
 - `idx_platform_users_verified` ON (verified)
 - `idx_platform_users_verification_status` ON (verification_status)
 
@@ -177,7 +176,10 @@ dependencies {
 - `fk_platform_users_user_id` FOREIGN KEY (user_id) REFERENCES auth.users(id)
 
 **Примечание:** Эта таблица содержит все бизнес-данные пользователя. Ссылка `user_id` связывает её с `auth.users.id` для аутентификации.
-```
+- **ВАЖНО:** Роли теперь хранятся только в Keycloak и не дублируются в PostgreSQL
+- **УДАЛЕНО:** Поле `role` в таблице `users` (было `role VARCHAR(50) NOT NULL`)
+
+**ВАЖНО:** Роли пользователей хранятся исключительно в Keycloak. В PostgreSQL нет таблиц для хранения ролей (`auth.roles`, `auth.permissions`, `auth.role_permissions` удалены). Роли передаются в JWT токене от Keycloak и проверяются каждым сервисом через валидацию токена.```
 
 #### Таблица: `moderation_items`
 ```sql
@@ -230,7 +232,7 @@ CREATE TABLE platform_service.analytics (
 
 ### Дополнительные таблицы (из data-model.md)
 
-#### Таблица: `loyalty_accounts`
+### Дополнительные таблицы (из data-model.md)
 ```sql
 CREATE TABLE platform_service.loyalty_accounts (
     id                  BIGSERIAL      PRIMARY KEY,

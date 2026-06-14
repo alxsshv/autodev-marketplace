@@ -30,18 +30,20 @@
 sequenceDiagram
     participant Client
     participant APIGateway
+    participant Keycloak
     participant AuthService
     participant PlatformService
     participant Kafka
 
-    Client->>APIGateway: POST /api/v1/auth/register
-    APIGateway->>AuthService: Валидация JWT в заголовке
-    Note right of APIGateway: Auth check
-    AuthService->>AuthService: Генерация JWT токена
+    Note over Client,PlatformService: Регистрация через Keycloak Admin API или Console
+    Client->>Keycloak: POST /admin/realms/{realm}/users (через Admin API)
+    Keycloak-->>Client: 201 Created (keycloak_user_id)
+    Keycloak->>AuthService: Webhook/Event о новом пользователе
+    AuthService->>AuthService: Создание записи в auth.users (синхронизация)
     AuthService->>Kafka: auth.user_registered
     Kafka-->>PlatformService: auth.user_registered (событие)
     PlatformService->>PlatformService: Создание профиля пользователя
-    PlatformService-->>Client: 201 Created
+    PlatformService-->>Client: 201 Created (profilе created)
 ```
 
 ### 2. Оформление заказа
@@ -182,10 +184,12 @@ sequenceDiagram
 ## Детали сценариев
 
 ### Регистрация пользователя
-1. Пользователь отправляет данные на API Gateway
-2. API Gateway проверяет JWT (если есть) и направляет в Auth Service
-3. Auth Service генерирует JWT и отправляет событие в Kafka
-4. Platform Service слушает событие и создаёт профиль пользователя
+1. Пользователь отправляет данные на Keycloak (через Admin API или Console)
+2. Keycloak создает пользователя и возвращает keycloak_user_id
+3. Keycloak отправляет webhook/event в Auth Service о новом пользователе
+4. Auth Service создает запись в PostgreSQL (синхронизация)
+5. Auth Service отправляет событие auth.user_registered в Kafka
+6. Platform Service слушает событие и создает профиль пользователя
 
 ### Оформление заказа
 1. Client отправляет запрос на оформление заказа
