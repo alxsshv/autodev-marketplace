@@ -6,7 +6,7 @@ import org.springframework.data.annotation.CreatedDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(schema = "auth", name = "users")
 public class User {
 
     public User() {
