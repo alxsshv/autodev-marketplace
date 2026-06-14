@@ -3,18 +3,6 @@ databaseChangeLog:
         file: v1.0.0/03-06-2026-create-table-users.sql
         relativeToChangelogFile: true
     - include:
-          file: v1.0.0/05-06-2026-create-table-oauth-providers.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-table-permissions.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-table-roles.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-table-role-permissions.sql
-          relativeToChangelogFile: true
-    - include:
           file: v1.0.0/07-06-2026-create-table-audit-logs.sql
           relativeToChangelogFile: true
     - include:
@@ -27,37 +15,10 @@ databaseChangeLog:
           file: v1.0.0/07-06-2026-create-index-auth.audit-logs-user-id.sql
           relativeToChangelogFile: true
     - include:
-          file: v1.0.0/07-06-2026-create-index-auth.oauth-providers-provider.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-index-auth.oauth-providers-user.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-index-auth.oauth-providers-user-provider.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-index-auth.providers-user-provider.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-index-auth.providers-user-provider-id.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-index-auth.role_permissions_permission_id.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-index-auth.role_permissions_role_id.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-create-index-auth.roles-name.sql
-          relativeToChangelogFile: true
-    - include:
           file: v1.0.0/07-06-2026-create-index-auth.users-email.sql
           relativeToChangelogFile: true
     - include:
           file: v1.0.0/07-06-2026-create-index-auth.users-keycloak-user-id.sql
-          relativeToChangelogFile: true
-    - include:
-          file: v1.0.0/07-06-2026-insert-initial-roles.sql
           relativeToChangelogFile: true
     - include:
           file: v1.0.0/07-06-2026-insert-initial-admin-user.sql

@@ -1,6 +1,0 @@
--- liquibase formatted sql
--- changeset Aleksey Shvariov:07-06-2026-create-index-auth.oauth-providers-provider
-
-CREATE INDEX idx_auth_oauth_providers_provider ON auth.oauth_providers(provider);
-
--- roolback DROP INDEX idx_auth_oauth_providers_provider;
