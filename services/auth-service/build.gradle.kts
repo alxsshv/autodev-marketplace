@@ -2,6 +2,7 @@ import java.time.Duration
 
 val versions = mapOf(
     "liquibase" to "5.0.3",
+    "lombok" to "1.18.46",
     "mockito" to "5.11.0",
     "postgresql" to "42.7.3",
     "spring-cloud" to "2024.0.1",
@@ -73,6 +74,10 @@ dependencies {
     //DATABASE
     implementation("org.postgresql:postgresql:${versions["postgresql"]}")
     implementation("org.liquibase:liquibase-core:${versions["liquibase"]}")
+
+    //HELPERS
+    implementation("org.projectlombok:lombok:${versions["lombok"]}")
+    annotationProcessor("org.projectlombok:lombok:${versions["lombok"]}")
 
     //TEST
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
