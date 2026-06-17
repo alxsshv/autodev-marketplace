@@ -222,15 +222,6 @@ components:
         email:
           type: string
           example: user@example.com
-        first_name:
-          type: string
-          example: John
-        last_name:
-          type: string
-          example: Doe
-        phone:
-          type: string
-          example: "+79001234567"
         enabled:
           type: boolean
           example: true
@@ -304,35 +295,6 @@ components:
               type: string
               format: email
               example: "user@example.com"
-            firstName:
-              type: string
-              example: "John"
-            lastName:
-              type: string
-              example: "Doe"
             enabled:
               type: boolean
               example: true
-            attributes:
-              type: object
-              description: Custom attributes
-
-    SyncResponse:
-      type: object
-      properties:
-        id:
-          type: integer
-          example: 1
-        keycloak_user_id:
-          type: string
-          example: "123e4567-e89b-12d3-a456-426614174000"
-        email:
-          type: string
-          example: "user@example.com"
-        enabled:
-          type: boolean
-          example: true
-        created_at:
-          type: string
-          format: date-time
-          example: "2026-06-14T10:00:00Z"

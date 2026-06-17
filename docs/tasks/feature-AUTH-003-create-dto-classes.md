@@ -34,9 +34,6 @@ feature/AUTH-003-create-dto-classes
   - `id` (Long)
   - `keycloakUserId` (String)
   - `email` (String)
-  - `firstName` (String, optional)
-  - `lastName` (String, optional)
-  - `phone` (String, optional)
   - `enabled` (Boolean)
   - `createdAt` (LocalDateTime)
 
@@ -48,18 +45,9 @@ feature/AUTH-003-create-dto-classes
 - [ ] Создан `WebhookEvent` DTO с полями:
   - `event` (String, enum: "user_created", "user_updated", "user_enabled", "user_disabled", "user_deleted")
   - `timestamp` (LocalDateTime)
-  - `user` (Object с полями id, username, email, firstName, lastName, enabled, attributes)
-
-- [ ] Создан `SyncResponse` DTO с полями:
-  - `id` (Long)
-  - `keycloakUserId` (String)
-  - `email` (String)
-  - `enabled` (Boolean)
-  - `createdAt` (LocalDateTime)
-
-- [ ] Создан `KeycloakPublicKey` DTO для GET /api/v1/auth/keys
-
-- [ ] Создан `KeycloakPublicKeyResponse` DTO с полем `keys` (List<KeycloakPublicKey>)
+  - `user` (Object с полями id, username, email, enabled)
+  
+**Примечание:** Значения enum указаны в snake_case как в OpenAPI спецификации. Поле `user` имеет inline определение типа (не ссылается на UserDto), так как в спецификации определено напрямую в схеме WebhookEvent.
 
 - [ ] Все DTO классы имеют геттеры и сеттеры (Lombok аннотации `@Data` или `@Getter/@Setter`)
 
@@ -84,3 +72,9 @@ Easy
 | Версия | Дата | Автор | Описание |
 |--------|------|-------|----------|
 | 1.0 | 2026-06-14 | Системный аналитик | Создание задачи |
+| 1.1 | 2026-06-17 | Системный аналитик | Убраны несоответствующие поля (firstName, lastName, phone, attributes) из UserDto и WebhookEvent. Приведены в соответствие с сущностью User. |
+| 1.2 | 2026-06-17 | Системный аналитик | Уточнено: значения enum для event используют snake_case (user_created, user_updated...) согласно OpenAPI спецификации. |
+| 1.3 | 2026-06-17 | Системный аналитик | Уточнено: поле user в WebhookEvent имеет inline определение (не ссылается на UserDto), так как в спецификации определено напрямую в схеме WebhookEvent. |
+| 1.4 | 2026-06-17 | Системный аналитик | Добавлен код Java для WebhookEvent с вложенным record User. Поле user имеет другую структуру, чем UserDto (id, username, email, enabled). |
+| 1.5 | 2026-06-17 | Системный аналитик | Удален SyncResponse. Он определен в спецификации, но не используется в текущей версии эндпоинта POST /api/v1/auth/sync, который возвращает только HTTP статус без тела ответа. |
+| 1.6 | 2026-06-17 | Системный аналитик | Удалены KeycloakPublicKey и KeycloakPublicKeyResponse. Эндпоинт GET /api/v1/auth/keys использует inline schema в спецификации. |
