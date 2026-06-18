@@ -1,12 +1,14 @@
 package com.autodev.auth.entity;
 
 import jakarta.persistence.*;
+import lombok.Builder;
 import org.springframework.data.annotation.CreatedDate;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(schema = "auth", name = "users")
+@Builder
 public class User {
 
     public User() {
