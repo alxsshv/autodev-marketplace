@@ -134,11 +134,14 @@ services:
     ports:
       - "8090:8080"  # HTTP порт
       - "8443:8443"  # HTTPS порт (если включите позже)
+    volumes:
+      - ./infrastructure/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     depends_on:
       keycloak-database:
         condition: service_healthy
     command:
       - start-dev
+      - --import-realm
     networks:
       - app_network
     healthcheck:
