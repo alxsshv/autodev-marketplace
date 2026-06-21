@@ -1,8 +1,16 @@
 openapi: 3.0.3
 info:
   title: AutoDev Marketplace API Gateway
-  version: 1.0.0
-  description: API Gateway for AutoDev Marketplace - routing, rate limiting, and JWT validation
+  version: 2.0.0
+  description: |
+    API Gateway for AutoDev Marketplace - routing, rate limiting, JWT validation, and security audit
+    
+    **Version 2.0.0 Updates:**
+    - Updated for MVP architecture (7 services)
+    - Direct Keycloak integration for JWT validation
+    - Rate limiting with Resilience4j
+    - CORS and security audit filters
+    - Service-to-service authentication (Service Token Filter)
 
 servers:
   - url: http://api-gateway:8080
@@ -11,11 +19,13 @@ servers:
     description: Local development
 
 paths:
+  # ==================== Actuator Endpoints (Health, Metrics) ====================
   /actuator/health:
     get:
       summary: Health check for API Gateway
       tags:
         - Actuator
+      description: Returns health status of the gateway and its dependencies (Consul, Redis)
       responses:
         '200':
           description: Gateway is healthy
@@ -27,12 +37,36 @@ paths:
                   status:
                     type: string
                     enum: [UP, DOWN, UNKNOWN]
-
+                  components:
+                    type: object
+                    properties:
+                      consul:
+                        $ref: '#/components/schemas/HealthComponent'
+                      redis:
+                        $ref: '#/components/schemas/HealthComponent'
+                      diskSpace:
+                        $ref: '#/components/schemas/HealthComponent'
+  
+  /actuator/health/redis:
+    get:
+      summary: Redis health check
+      tags:
+        - Actuator
+      description: Specific health check for Redis cache
+      responses:
+        '200':
+          description: Redis health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthComponent'
+  
   /actuator/prometheus:
     get:
       summary: Prometheus metrics endpoint
       tags:
         - Actuator
+      description: Exposes Prometheus-compatible metrics for monitoring
       responses:
         '200':
           description: Prometheus metrics
@@ -41,13 +75,582 @@ paths:
               schema:
                 type: string
 
+  # ==================== Service Routes (MVP: 7 services) ====================
+  
+  # --- Platform Service Routes ---
+  /api/v1/platform{path}:
+    get:
+      summary: Platform service endpoints
+      tags:
+        - Platform Service
+      description: |
+        User profile management and reviews
+        - User registration (Keycloak sync)
+        - Profile management
+        - Reviews and ratings
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /users/profile
+      responses:
+        '200':
+          description: Success response
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    
+  /api/v1/platform{path}:
+    post:
+      summary: Platform service POST endpoints
+      tags:
+        - Platform Service
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /users/register
+      responses:
+        '201':
+          description: Created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  
+  # --- Catalog Service Routes ---
+  /api/v1/catalog{path}:
+    get:
+      summary: Catalog service endpoints
+      tags:
+        - Catalog Service
+      description: |
+        Product catalog and search
+        - Search by VIN, article, name
+        - Category navigation
+        - Filtering and sorting
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /products
+        - name: vin
+          in: query
+          schema:
+            type: string
+            example: WDDZZZ1JG3A123456
+        - name: article
+          in: query
+          schema:
+            type: string
+            example: 0025458201
+        - name: category
+          in: query
+          schema:
+            type: string
+            example: engine
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Success response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  
+  # --- Order Service Routes ---
+  /api/v1/orders{path}:
+    get:
+      summary: Order service GET endpoints
+      tags:
+        - Order Service
+      description: |
+        Order management
+        - View own orders
+        - Order status tracking
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /my
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED]
+      responses:
+        '200':
+          description: Success response
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    
+  /api/v1/orders{path}:
+    post:
+      summary: Order service POST endpoints
+      tags:
+        - Order Service
+      description: |
+        Order creation and management
+        - Create order
+        - Update order status
+        - Cancel order
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /checkout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+      responses:
+        '201':
+          description: Order created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  
+  # --- Payment Service Routes ---
+  /api/v1/payments{path}:
+    post:
+      summary: Payment processing endpoints
+      tags:
+        - Payment Service
+      description: |
+        Payment processing
+        - Process payment (card, cash, transfer)
+        - Payment status check
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /process
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Payment processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  
+  # --- Communication Service Routes ---
+  /api/v1/communication{path}:
+    get:
+      summary: Communication service endpoints (WebSocket)
+      tags:
+        - Communication Service
+      description: |
+        Internal messaging
+        - Chat between buyer and seller
+        - Message history
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /messages
+        - name: conversationId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success response
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  
+  /api/v1/communication{path}:
+    post:
+      summary: Communication service POST endpoints
+      tags:
+        - Communication Service
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /messages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageRequest'
+      responses:
+        '201':
+          description: Message sent
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  
+  # --- Notification Service Routes ---
+  /api/v1/notifications{path}:
+    get:
+      summary: Notification service GET endpoints
+      tags:
+        - Notification Service
+      description: |
+        Notification management
+        - View notifications
+        - Subscription management
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /my
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [EMAIL, SMS, PUSH]
+      responses:
+        '200':
+          description: Success response
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    
+  /api/v1/notifications{path}:
+    post:
+      summary: Notification service POST endpoints
+      tags:
+        - Notification Service
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+            example: /subscribe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionRequest'
+      responses:
+        '201':
+          description: Subscription created
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  
+  # ==================== Authentication & Security ====================
+  
+  /api/v1/auth/validate-token:
+    post:
+      summary: JWT Token Validation (direct Keycloak integration)
+      tags:
+        - Authentication
+      description: |
+        Validate JWT token directly with Keycloak
+        Used by API Gateway to verify client tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: JWT token to validate
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenValidationResponse'
+        '401':
+          description: Token is invalid or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh JWT token
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
+  # ==================== Schemas ====================
+  schemas:
+    HealthComponent:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN, UNKNOWN]
+        description:
+          type: string
+        details:
+          type: object
+    
+    PagedResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            type: object
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        currentPage:
+          type: integer
+        size:
+          type: integer
+    
+    OrderRequest:
+      type: object
+      required:
+        - items
+        - deliveryMethod
+        - paymentMethod
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        deliveryMethod:
+          type: string
+          enum: [CURSOR, TK, POST, PICKUP]
+        deliveryAddress:
+          type: string
+        paymentMethod:
+          type: string
+          enum: [CARD, CASH, TRANSFER]
+        note:
+          type: string
+    
+    OrderItem:
+      type: object
+      required:
+        - productId
+        - quantity
+      properties:
+        productId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+    
+    PaymentRequest:
+      type: object
+      required:
+        - orderId
+        - amount
+        - paymentMethod
+      properties:
+        orderId:
+          type: string
+        amount:
+          type: number
+          format: double
+        paymentMethod:
+          type: string
+          enum: [CARD, CASH, TRANSFER]
+        cardToken:
+          type: string
+          description: Token from payment gateway (for card payment)
+    
+    PaymentResponse:
+      type: object
+      properties:
+        paymentId:
+          type: string
+        orderId:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+        amount:
+          type: number
+          format: double
+        paymentMethod:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    
+    MessageRequest:
+      type: object
+      required:
+        - conversationId
+        - text
+      properties:
+        conversationId:
+          type: string
+        text:
+          type: string
+        mediaUrl:
+          type: string
+    
+    SubscriptionRequest:
+      type: object
+      required:
+        - eventType
+        - channels
+      properties:
+        eventType:
+          type: string
+          enum: [ORDER_STATUS, PRICE_DROP, NEW_REVIEW]
+        channels:
+          type: array
+          items:
+            type: string
+            enum: [EMAIL, SMS, PUSH]
+        enabled:
+          type: boolean
+          default: true
+    
+    TokenValidationResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        userId:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        expiresIn:
+          type: integer
+          description: Seconds until expiration
+    
+    TokenResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Seconds until expiration
+    
+    ErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        path:
+          type: string
+  
+  # ==================== Responses ====================
+  responses:
+    Unauthorized:
+      description: Unauthorized - Invalid or missing JWT token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    Forbidden:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    BadRequest:
+      description: Bad Request - Invalid input data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  
+  # ==================== Security Schemes ====================
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"
+      description: |
+        JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"
+        Tokens are validated directly against Keycloak
+    
+    serviceBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Service-to-service authentication token
+        Each service has its own service account in Keycloak
 
 security:
   - bearerAuth: []

@@ -1,10 +1,8 @@
 # AutoDev Marketplace — System Architecture Overview
 **Распределённая система продажи автозапчастей на стеке Java и Spring Boot**
 
-*Версия документа: 1.6*
-*Дата обновления: 2026-06-14*
-*Консолидация сервисов: 25+ → 8 сервисов для MVP*
-
+*Версия документа: 1.9*
+*Дата обновления: 2026-06-21*
 ---
 
 
@@ -25,121 +23,41 @@ AutoDev Marketplace — это учебная платформа для прод
 ---
 
 
-## 2. Контекст системы (C4 Level 1)
-
-
-```mermaid
-graph TD
-    A[Покупатель] -->|HTTPS| B[AutoDev Marketplace]
-    C[Продавец] -->|HTTPS| B
-    D[Модератор] -->|HTTPS| B
-    E[Администратор] -->|HTTPS| B
-    
-    B --> F[Платёжные системы]
-    B --> G[Службы доставки]
-    B --> H[TecDoc]
-    B --> I[CRM/ERP системы]
-    
-    F -->|API| B
-    G -->|API| B
-    H -->|API| B
-    I -->|API| B
-    
-    classDef user fill:#009688,stroke:#333,stroke-width:1px,color:white;
-    classDef system fill:#2196F3,stroke:#333,stroke-width:1px,color:white;
-    classDef external fill:#FF9800,stroke:#333,stroke-width:1px,color:white;
-    
-    class A,C,D,E user
-    class B system
-    class F,G,H,I external
-```
-
-**Границы системы:**
-- Внутри: все микросервисы, базы данных, брокеры сообщений, API Gateway
-- Вне: мобильное приложение (разрабатывается отдельно), внешние интеграции (платежи, доставка, каталоги)
-
-
-**Внешние системы:**
-- Платёжные шлюзы: Сбербанк, Тинькофф
-- Службы доставки: СДЭК, Boxberry, Почта России
-- Каталоги запчастей: TecDoc
-- CRM/ERP: 1С, Bitrix24
-
----
-
-
 ## 3. Архитектурное представление
 
-### 3.0. Названия сервисов и директорий (MVP: 8 сервисов)
+### 3.0. Названия сервисов и директорий (MVP: 7 сервисов)
 
 | Человекочитаемое название | Название сервиса (service name) | Директория |
 |---------------------------|--------------------------------|-----------|
 | API Gateway | api-gateway | services/api-gateway |
-| Auth Service | auth-service | services/auth-service |
 | Catalog Service | catalog-service | services/catalog-service |
 | Order Service | order-service | services/order-service |
-| Search Service | search-service | services/search-service |
 | Payment Service | payment-service | services/payment-service |
 | Communication Service | communication-service | services/communication-service |
+| Notification Service | notification-service | services/notification-service |
 | Platform Service | platform-service | services/platform-service |
 
+**Platform Service для MVP (строгий минимум):**
+- `UserProfileService` - управление профилями пользователей (синхронизировано с Keycloak)
+- `ReviewService` - управление отзывами и рейтингами
+
+
 **Примечание:**
-- Для MVP используется 8 консолидированных сервисов
-- Детали консолидации см. в `docs/architecture/service-consolidation.md`
-- Дополнительные сервисы можно добавить позже (integration-service, video-call-service, media-service)
+- Для MVP используется 7 консолидированных сервисов
+- Подробности консолидации см. в `docs/architecture/business/services-for-mvp.md`
 
 **Миграции базы данных:**
-- Каждый сервис имеет свою директорию миграций в `src/main/resources/db/changelog/`
 - Для MVP используется версия `v1.0.0` для каждого сервиса
 - Master changelog файлы используют YAML формат (`master.yaml`)
 - SQL файлы миграций в директории `v1.0.0/`
-- Подробности см. в `docs/architecture/database-migrations.md`
 
-**ВАЖНО:** Роли пользователей хранятся исключительно в Keycloak. В PostgreSQL нет таблиц для хранения ролей (`auth.roles`, `auth.permissions`, `auth.role_permissions` не создаются для MVP).
 
-**ВАЖНО:** Роли пользователей хранятся исключительно в Keycloak. В PostgreSQL нет таблиц для хранения ролей (`auth.roles`, `auth.permissions`, `auth.role_permissions` удалены).
+**Platform Service (MVP):**
+- `UserProfileService` - управление профилями пользователей (синхронизировано с Keycloak)
+- `ReviewService` - управление отзывами и рейтингами
 
-**ВАЖНО:** В таблице `auth.users` НЕТ поля `role`. Роли хранятся только в Keycloak и передаются в JWT токене.
 
-**ВАЖНО:** Auth Service НЕ предоставляет endpoints для управления ролями. Управление ролями осуществляется только через Keycloak Admin Console или API.
-
-**ВАЖНО:** Управление профилем пользователя разделено между сервисами:
-- Аутентификационные данные (email, enabled) — управление только через Keycloak Admin API
-- Бизнес-данные профиля (first_name, last_name, phone) — обновление через Platform Service
-- GET `/api/v1/auth/me` — получение данных текущего пользователя из кэша (синхронизировано из PostgreSQL)
-- GET `/api/v1/auth/users/{id}` — получение пользователя по ID для синхронизации с PostgreSQL (только ADMIN)
-- GET `/api/v1/platform/users/profile` — получение полного профиля
-- PUT `/api/v1/platform/users/profile` — обновление бизнес-данных профиля
-
-### Архитектурное правило #7: Отсутствие ролей в Kafka событиях
-
-**Правило:** Поле `role` или `roles` **НИКОГДА** не должно присутствовать в payload любого Kafka события в системе.
-
-**Обоснование:**
-- Роли — это аутентификационные данные, которые хранятся исключительно в Keycloak
-- При аутентификации роли передаются в JWT токене
-- Синхронизация ролей между сервисами не требуется и может привести к рассинхронизации
-- PostgreSQL не хранит роли (`auth.roles`, `auth.permissions`, `auth.role_permissions` удалены)
-- В таблице `platform_service.user_profiles` нет поля `role` (удалено в миграции v0.9.0)
-
-**Что должно содержаться в payload событий:**
-- Только аутентификационные данные (email, enabled status, keycloak_user_id)
-- Только бизнес-данные профиля (first_name, last_name, phone, store_name, verification_status и т.д.)
-
-**Что НЕ должно содержаться в payload событий:**
-- ❌ Поле `role` или `roles` — оно никогда не передается между сервисами через Kafka
-- ❌ Структура `realm_access.roles` — это только для JWT токенов Keycloak
-
-**Применение:**
-- Все Kafka события должны содержать только аутентификационные данные и бизнес-данные профиля
-- При обработке Kafka событий сервисы НЕ должны ожидать наличие поля `role` в payload
-- При разработке новых событий следует придерживаться этого правила
-
-**Документация:**
-- Подробности см. в `kafka-events/auth-service-events.md`
-- Детали синхронизации пользователей см. в `security/user-registration-architecture.md`
-
-### 3.1. Контейнеры (C4 Level 2) - MVP: 8 сервисов
+### 3.1. Контейнеры (C4 Level 2) - MVP: 7 сервисов
 
 ```mermaid
 graph TD
@@ -149,23 +67,21 @@ graph TD
         C[Мобильное приложение]
     end
     
-    subgraph "MVP Сервисы (8)"
+    subgraph "MVP Сервисы (7)"
         D[API Gateway]
-        E[Auth Service]
-        F[Catalog Service]
-        G[Order Service]
-        H[Search Service]
-        I[Payment Service]
-        J[Communication Service]
-        K[Platform Service]
+        E[Catalog Service]
+        F[Order Service]
+        G[Payment Service]
+        H[Communication Service]
+        I[Notification Service]
+        J[Platform Service]
     end
     
     subgraph "Хранилища"
-        L[PostgreSQL]
-        M[Redis]
-        N[Elasticsearch]
-        O[Kafka]
-        P[MinIO]
+        K[PostgreSQL]
+        L[Redis]
+        M[Kafka]
+        N[MinIO]
     end
     
     A --> D
@@ -178,39 +94,39 @@ graph TD
     D --> H
     D --> I
     D --> J
-    D --> K
     
-    F --> L
-    G --> L
-    I --> L
-    K --> L
+    E --> K
+    F --> K
+    G --> K
+    H --> K
+    I --> K
+    J --> K
     
-    M --> D
-    M --> E
-    M --> F
-    M --> G
-    M --> H
-    M --> J
-    M --> K
+    L --> D
+    L --> E
+    L --> F
+    L --> G
+    L --> H
+    L --> I
+    L --> J
     
-    H --> N
+    E --> M
+    F --> M
+    G --> M
+    H --> M
+    I --> M
+    J --> M
     
-    F --> O
-    G --> O
-    I --> O
-    J --> O
-    K --> O
-    
-    P --> F
-    P --> K
+    N --> E
+    N --> J
     
     classDef client fill:#4CAF50,stroke:#333,stroke-width:1px,color:white;
     classDef service fill:#2196F3,stroke:#333,stroke-width:1px,color:white;
     classDef storage fill:#9C27B0,stroke:#333,stroke-width:1px,color:white;
     
     class A,B,C client
-    class D,E,F,G,H,I,J,K service
-    class L,M,N,O,P storage
+    class D,E,F,G,H,I,J service
+    class K,L,M,N storage
 ```
 
 ### 3.2. Компоненты (C4 Level 3)
@@ -218,75 +134,43 @@ graph TD
 
 **API Gateway:**
 - `GatewayService` - маршрутизация запросов
-- `AuthenticationFilter` - JWT валидация
+- `AuthenticationFilter` - JWT валидация через Keycloak
 - `RateLimitingFilter` - ограничение запросов
 - `CORSFilter` - управление политиками CORS
 - `ServiceTokenFilter` - межсервисная аутентификация
 - `SecurityAuditFilter` - запись событий безопасности
 
-**Auth Service:**
-- `KeycloakIntegrationService` - интеграция с Keycloak (синхронизация пользователей)
-- `TokenService` - генерация и валидация JWT
-- `UserService` - управление пользователями (синхронизация между Keycloak и PostgreSQL)
-- `ServiceTokenService` - управление service account токенами
-
-**Catalog Service:**
-- `ProductCatalogService` - каталог товаров
+**Catalog Service (MVP):**
+- `ProductCatalogService` - базовый каталог товаров (без аналогов и TecDoc интеграций)
 - `CategoryService` - категории
 - `VINLookupService` - подбор по VIN
-- `AlternativesService` - каталог аналогов
-- `CompatibilityService` - совместимость по VIN
-- `CrossReferenceService` - кросс-номера
 - `PriceService` - управление ценами
-- `InventoryService` - учёт наличия
 
-**Order Service:**
+
+**Order Service (MVP):**
 - `OrderService` - оформление заказов
 - `CartService` - корзина
-- `BookingService` - бронирование товара
 - `DeliveryService` - выбор способа доставки и календарь
 - `TrackingService` - отслеживание заказа с ТК
 - `DocumentService` - печать документов
-- `DeliveryCostService` - расчёт стоимости доставки
+- `DeliveryCostService` - расчёт стоимости доставки (базовый)
 - `ReturnService` - возвраты и гарантия
 
-**Search Service:**
-- `SearchService` - полнотекстовый поиск
-- `FilterService` - фильтрация результатов
-- `AutocompleteService` - автодополнение
-- `RecommendationSearchService` - рекомендательный поиск
-
-**Payment Service:**
-- `PaymentProcessingService` - обработка оплаты
-- `EscrowService` - безопасная сделка (эскроу)
+**Payment Service (MVP):**
+- `PaymentProcessingService` - базовая обработка оплаты (без эскроу и интеграций)
 - `PaymentMethodService` - управление способами оплаты
-- `PaymentHistoryService` - история платежей
-- `SberbankIntegrationService` - интеграция со Сбербанком
-- `TinkoffIntegrationService` - интеграция с Тинькофф
 
-**Communication Service:**
+
+**Communication Service (MVP):**
+- `CommunicationService` - чат в реальном времени (WebSocket, базовый функционал)
+
+
+**Notification Service (MVP):**
 - `NotificationService` - email, SMS, push уведомления
-- `MessagingService` - чат в реальном времени
-- `SubscriptionRuleService` - управление правилами подписок
-- `NotificationPreferenceService` - настройка частоты и типов
-- `MessageHistoryService` - хранение истории переписки
-- `FileAttachmentService` - прикрепление файлов
-- `MessageTemplateService` - шаблоны быстрых ответов
-- `VideoCallService` - видеозвонки
 
-**Platform Service:**
-- `UserProfileService` - управление профилями пользователей
-- `VerificationService` - верификация пользователей
-- `StoreSettingsService` - настройки магазина продавца
-- `ModerationService` - модерация контента
-- `ReviewService` - управление отзывами
-- `AnalyticsService` - аналитика платформы
-- `AdminService` - настройка системы
-- `MarketingService` - таргетированная реклама
-- `LoyaltyService` - программа лояльности
-- `FavoriteListService` - управление избранным
-- `SearchHistoryService` - история поиска
-- `ViewHistoryService` - история просмотров
+**Platform Service (MVP):**
+- `UserProfileService` - управление профилями пользователей (синхронизировано с Keycloak)
+- `ReviewService` - управление отзывами и рейтингами
 
 
 ---
@@ -315,7 +199,6 @@ graph TD
 - **Event Sourcing:** сохранение событий для восстановления состояния системы
 
 ### Инфраструктура высокой доступности
-- **Redis Cluster with Sentinel:** 3 узла Redis (Cluster mode) + 3 узла Sentinel для автоматического failover кэша
 - **PostgreSQL Primary-Replica:** синхронная репликация между зонами отказа
 - **Kafka Cluster:** 3 брокера с replication.factor=3 и min.insync.replicas=2
 
@@ -324,7 +207,7 @@ graph TD
 - Поддержка **Canary Releases** для постепенного внедрения изменений
 
 ### Масштабирование
-- **Горизонтальное масштабирование** stateless сервисов (API Gateway, Auth Service)
+- **Горизонтальное масштабирование** stateless сервисов (API Gateway, платформенные сервисы)
 - **Вертикальное масштабирование** баз данных при необходимости
 - **Автомасштабирование** на основе метрик (CPU, memory, request rate)
 
@@ -334,93 +217,35 @@ graph TD
 ## 5. Основные функциональные модули
 
 ### API Gateway
-Реализует единую точку входа для всех клиентов. Выполняет маршрутизацию запросов к соответствующим микросервисам, аутентификацию через JWT, ограничение частоты запросов (rate limiting) и управление политиками CORS. Использует Spring Cloud Gateway с интеграцией в Keycloak для проверки токенов.
+Реализует единую точку входа для всех клиентов. Выполняет маршрутизацию запросов к соответствующим микросервисам, аутентификацию через JWT (валидация через Keycloak напрямую, без auth-service), ограничение частоты запросов (rate limiting) и управление политиками CORS. Использует Spring Cloud Gateway с интеграцией в Keycloak для проверки токенов.
 
-### Auth Service
-Обеспечивает централизованную аутентификацию через Keycloak как единственный источник правды для ролей. Реализует OAuth2/OpenID Connect протоколы, кэширование JWT токенов в Redis для производительности, и асинхронную синхронизацию пользователей между Keycloak и PostgreSQL через webhook/event (рекомендуемый) или periodic sync job (backup). Роли пользователей **не хранятся в PostgreSQL** — они выдаются Keycloak в JWT токене и проверяются каждым сервисом напрямую.
+**ВАЖНО:** API Gateway проверяет JWT токены через Keycloak endpoint напрямую, без промежуточного auth-service. Это упрощает архитектуру и снижает задержки.
 
-### User Service
-**Внимание:** Согласно консолидации сервисов для MVP, User Service был объединён в **Platform Service**. Этот раздел оставлен для исторической справки.
+### Platform Service
+Для MVP включает только функции управления профилями и отзывами:
+- `UserProfileService` - управление профилями пользователей (синхронизировано с Keycloak)
+- `ReviewService` - управление отзывами и рейтингами
 
-До консолидации User Service отвечал за управление пользователями и профилями. После консолидации его функционал включён в Platform Service (см. раздел "Platform Service").
+**Важно:** Для MVP Platform Service НЕ включает модерацию, аналитику, маркетинг, лояльность и другие функции. Эти функции могут быть добавлены после релиза MVP.
 
-**Ключевые функции, перемещённые в Platform Service:**
-- Управление профилями пользователей
-- Верификация пользователей
-- Настройки магазина для продавцов
-- Программа лояльности с накоплением баллов
-- История поиска и просмотров
-- Избранное с папками по категориям
-- Персонализированные рекомендации и скидки
+### Catalog Service (MVP)
+Предоставляет базовый функционал каталога товаров с подбором по VIN. Управляет категориями и характеристиками запчастей.
 
-### Catalog Service
-Предоставляет расширенный функционал каталога товаров с подбором по VIN, каталогом аналогов. Управляет категориями, характеристиками и совместимостью запчастей. Интегрируется с внешними каталогами (TecDoc) для получения данных о совместимости автомобилей.
+**Важно:** Для MVP Catalog Service включает только базовый каталог с поиском (без аналогов, без TecDoc интеграции). 
 
-### Pricing Service
-Обеспечивает управление ценами, историю изменения цен и динамическое ценообразование. Поддерживает загрузку прайс-листов в форматах CSV, XLSX, XML, YML. Интегрируется с системами учёта продавцов (1С, ERP) через веб-хуки и автоматическую загрузку.
-
-### Inventory Service
-Обеспечивает учёт наличия товаров, статус наличия (в наличии, под заказ, на складе) и отслеживание движения товара. Реализует механизм резервирования наличия при заказе для обеспечения согласованности данных.
-
-### Search Service
-Предоставляет полнотекстовый поиск с расширенной фильтрацией по цене, состоянию, наличию, региону продавца, рейтингу, сроку доставки и другим критериям. Реализует автодополнение и рекомендательный поиск на основе истории пользователя.
+**Полнотекстовый поиск для MVP:** PostgreSQL FTS используется вместо отдельного search-service. Это упрощает архитектуру и снижает требования к инфраструктуре.
 
 ### Order Service
-Реализует процесс оформления заказов с корзиной, безопасной сделкой (эскроу) и управлением статусами. Поддерживает бронирование товара с резервированием наличия, выбор способов доставки с календарем (выбор даты/времени), отслеживание статуса заказа с интеграцией транспортных компаний. Использует Saga Pattern для координации распределённых транзакций между сервисами.
-
-**Статусы заказа:** Ожидает подтверждения, В обработке, Отправлен, Доставляется, Готов к получению, Завершён, Отменён, Возврат.
+Реализует процесс оформления заказов с корзиной.
 
 ### Payment Service
-Обеспечивает обработку оплаты через онлайн-оплату картой (3DSecure), безопасную сделку (эскроу), наличные при получении и банковский перевод. Интегрируется с платёжными системами Сбербанк и Тинькофф для обеспечения надёжных платежей.
-
-### Logistics Service
-Управляет доставкой, отслеживанием заказов с ТК и расчётом стоимости доставки по регионам. Интегрируется с службами доставки СДЭК, Boxberry, Почта России для автоматизации логистических процессов.
-
-### Returns Service
-Обеспечивает обработку возвратов и гарантийных случаев. Реализует механизм возврата денежных средств, фиксацию причин возврата и обслуживание гарантийных обязательств.
+Обеспечивает обработку оплаты через онлайн-оплату картой, наличные при получении и банковский перевод. 
 
 ### Notification Service
-Обеспечивает отправку уведомлений через email, SMS и push. Поддерживает персонализированные подписки на события (снижение цены, статус заказа, появление редких запчастей, новые объявления по заданным критериям). Реализует асинхронную отправку уведомлений через Kafka для обеспечения надёжности доставки и настройку частоты и типов уведомлений.
+Обеспечивает отправку уведомлений через email, SMS и push. Поддерживает персонализированные подписки на события. Реализует асинхронную отправку уведомлений через Kafka для обеспечения надёжности доставки уведомлений.
 
-### Messaging Service
-Предоставляет функционал внутреннего чата между покупателями и продавцами. Включает историю переписки, возможность прикрепления файлов, шаблоны быстрых ответов, видеозвонки и уведомления о новых сообщениях. Поддерживает WebSocket для реального времени обмена сообщениями.
-
-### Moderation Service
-Обеспечивает модерацию контента. Включает модерацию объявлений и отзывов, модерацию контента и приём жалоб от пользователей. Автоматизирует проверку на соответствие правилам и позволяет модераторам принимать решения о публикации/удалении контента.
-
-### Marketing Service
-Реализует таргетированную рекламу для продавцов, управление акциями и баннерами. Обеспечивает аналитику маркетинговых кампаний и продвижение товаров на платформе.
-
-### Reporting Service
-Генерирует отчёты и обеспечивает экспорт данных в Excel/PDF. Предоставляет дашборд отчётов и поддерживает кастомные отчёты для удовлетворения специфических бизнес-потребностей.
-
-### Analytics Service
-Обеспечивает аналитику платформы. Включает аналитику по категориям, региональную аналитику и анализ трендов для принятия управленческих решений.
-
-### Admin Service
-Обеспечивает аудит действий, мониторинг системы и настройку конфигурации. Хранит журнал действий пользователей для обеспечения прозрачности и безопасности системы.
-
-### SellerDashboard Service
-Предоставляет личный кабинет продавца с дашбордом, отображающим ключевые метрики: количество просмотров объявлений, число контактов от покупателей, динамику продаж, рейтинг продавца. Включает статистику по объявлениям и аналитику продаж.
-
-### SellerAnalytics Service
-Обеспечивает аналитику для продавцов. Включает производительность продавца, статистику по объявлениям, финансовую аналитику и конверсию продавца для оптимизации бизнес-процессов.
-
-### KnowledgeBase Service
-Предоставляет базу знаний со статьями и руководствами по подбору запчастей, видеоинструкциями по установке, часто задаваемыми вопросами и поиском в базе знаний для самостоятельного решения проблем.
-
-### PartsCalculator Service
-Реализует калькулятор подбора запчастей по VIN, расчёт количества расходников по пробегу, подбор комплекта для ТО и рекомендации по сезонной замене для оптимизации подбора запчастей.
-
-### Integration Service
-Обеспечивает интеграцию с внешними системами: TecDoc, 1С, ERP, Bitrix24. Реализует веб-хуки и API для партнёров для автоматизации обмена данными и синхронизации информации.
-
-### VideoCall Service
-Предоставляет видеозвонки между покупателями и продавцами для детального осмотра товара, хранение истории видеозвонков и запись видеозвонков для последующего просмотра.
-
-### Media Service
-Обеспечивает хранение и управление медиафайлами (изображения, видео) для товаров, отзывов и объявлений. Поддерживает загрузку, обработку, оптимизацию изображений и транскодирование видео для эффективной доставки медиа-контента.
-
+### Communication Service
+Предоставляет функционал внутреннего чата между покупателями и продавцами. Базовый функционал.
 
 ## 6. Нефункциональные требования (NFR)
 
@@ -454,7 +279,6 @@ graph TD
 - `Inventory`: учёт наличия товаров
 - `Pricing`: информация о ценах
 - `Delivery`: информация о доставке
-- `Return`: возвраты и гарантия
 - `SearchHistory`: история поиска
 - `ViewHistory`: история просмотров
 - `FavoriteItem`: избранные товары
@@ -489,9 +313,7 @@ graph TD
 ### Базы данных и кэширование
 - **PostgreSQL**: 15 - основная реляционная база данных для хранения структурированных данных
 - **Redis**: 7 - кэширование часто запрашиваемых данных и хранение сессий (Redis Cluster с Sentinel для автоматического failover)
-- **Elasticsearch**: 8.13.0 - полнотекстовый поиск и агрегации
 - **Apache Kafka**: 7.3.2 - асинхронная коммуникация между сервисами, event sourcing
-- **Zookeeper**: 7.3.2 - координация Kafka кластера
 - **MinIO**: 2023.05.14 - объектное хранилище для файлов и изображений
 
 ### Инфраструктура и мониторинг
@@ -590,17 +412,11 @@ graph TD
 | BUYER | Покупатель товаров | order-service, catalog-service |
 | SELLER | Продавец товаров | catalog-service, order-service, platform-service |
 | MODERATOR | Модератор контента | platform-service, communication-service |
-| ADMIN | Администратор системы | auth-service, platform-service, admin-service |
+| ADMIN | Администратор системы | platform-service, admin-service |
 
 #### Применение RBAC по сервисам
 
-**Auth Service:**
-- BUYER: login, refresh, logout, view profile
-- SELLER: login, refresh, logout, view profile
-- MODERATOR: login, refresh, logout, view profile
-- ADMIN: все права BUYER + управление пользователями и ролями
-
-**Platform Service:**
+**Platform Service (включает функции user-service):**
 - BUYER: view own profile, manage favorites, search
 - SELLER: manage store, manage own products, view analytics
 - MODERATOR: moderate content, view reports
