@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPath": "/admin"
+    "urlPath": "/communication"
   },
   "response": {
     "status": 200,

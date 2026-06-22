@@ -19,17 +19,10 @@ spring:
           predicates:
             - Path=/actuator/**
 
-        - id: user-service
-          uri: lb://user-service
+        - id: platform-service
+          uri: lb://platform-service
           predicates:
-            - Path=/api/v1/users/**
-          filters:
-            - RewritePath=/api/v1/(?<path>.*), /$\{path}
-
-        - id: auth-service
-          uri: lb://auth-service
-          predicates:
-            - Path=/api/v1/auth/**
+            - Path=/api/v1/platform/**
           filters:
             - RewritePath=/api/v1/(?<path>.*), /$\{path}
 
@@ -40,20 +33,6 @@ spring:
           filters:
             - RewritePath=/api/v1/(?<path>.*), /$\{path}
 
-        - id: pricing-inventory-service
-          uri: lb://pricing-inventory-service
-          predicates:
-            - Path=/api/v1/price/**
-          filters:
-            - RewritePath=/api/v1/(?<path>.*), /$\{path}
-
-        - id: search-service
-          uri: lb://search-service
-          predicates:
-            - Path=/api/v1/search/**
-          filters:
-            - RewritePath=/api/v1/(?<path>.*), /$\{path}
-
         - id: order-service
           uri: lb://order-service
           predicates:
@@ -61,38 +40,24 @@ spring:
           filters:
             - RewritePath=/api/v1/(?<path>.*), /$\{path}
 
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/v1/payments/**
+          filters:
+            - RewritePath=/api/v1/(?<path>.*), /$\{path}
+
+        - id: communication-service
+          uri: lb://communication-service
+          predicates:
+            - Path=/api/v1/communication/**
+          filters:
+            - RewritePath=/api/v1/(?<path>.*), /$\{path}
+
         - id: notification-service
           uri: lb://notification-service
           predicates:
             - Path=/api/v1/notifications/**
-          filters:
-            - RewritePath=/api/v1/(?<path>.*), /$\{path}
-
-        - id: review-service
-          uri: lb://review-service
-          predicates:
-            - Path=/api/v1/reviews/**
-          filters:
-            - RewritePath=/api/v1/(?<path>.*), /$\{path}
-
-        - id: recommendation-service
-          uri: lb://recommendation-service
-          predicates:
-            - Path=/api/v1/recommendations/**
-          filters:
-            - RewritePath=/api/v1/(?<path>.*), /$\{path}
-
-        - id: admin-service
-          uri: lb://admin-service
-          predicates:
-            - Path=/api/v1/admin/**
-          filters:
-            - RewritePath=/api/v1/(?<path>.*), /$\{path}
-
-        - id: analytics-service
-          uri: lb://analytics-service
-          predicates:
-            - Path=/api/v1/analytics/**
           filters:
             - RewritePath=/api/v1/(?<path>.*), /$\{path}
 

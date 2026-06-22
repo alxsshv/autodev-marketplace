@@ -13,7 +13,7 @@
         "Service": {
           "ID": "notification-service-1",
           "Service": "notification-service",
-          "Port": 8288
+          "Port": 8285
         },
         "Checks": [
           {
