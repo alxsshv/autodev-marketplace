@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "GET",
-    "urlPathPattern": "/v1/health/service/analytics-service.*"
+    "urlPathPattern": "/v1/health/service/platform-service.*"
   },
   "response": {
     "status": 200,
@@ -11,13 +11,13 @@
           "Address": "127.0.0.1"
         },
         "Service": {
-          "ID": "analytics-service-1",
-          "Service": "analytics-service",
-          "Port": 8292
+          "ID": "platform-service-1",
+          "Service": "platform-service",
+          "Port": 8281
         },
         "Checks": [
           {
-            "CheckID": "service:analytics-service-1",
+            "CheckID": "service:platform-service-1",
             "Status": "passing"
           }
         ]

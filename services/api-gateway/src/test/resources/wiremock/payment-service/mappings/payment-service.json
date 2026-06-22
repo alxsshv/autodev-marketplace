@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPath": "/recommendations"
+    "urlPath": "/payments"
   },
   "response": {
     "status": 200,

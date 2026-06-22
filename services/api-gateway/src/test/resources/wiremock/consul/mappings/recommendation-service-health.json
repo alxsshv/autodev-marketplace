@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "GET",
-    "urlPathPattern": "/v1/health/service/recommendation-service.*"
+    "urlPathPattern": "/v1/health/service/communication-service.*"
   },
   "response": {
     "status": 200,
@@ -11,13 +11,13 @@
           "Address": "127.0.0.1"
         },
         "Service": {
-          "ID": "recommendation-service-1",
-          "Service": "recommendation-service",
-          "Port": 8290
+          "ID": "communication-service-1",
+          "Service": "communication-service",
+          "Port": 8286
         },
         "Checks": [
           {
-            "CheckID": "service:recommendation-service-1",
+            "CheckID": "service:communication-service-1",
             "Status": "passing"
           }
         ]

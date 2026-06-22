@@ -13,7 +13,7 @@
         "Service": {
           "ID": "order-service-1",
           "Service": "order-service",
-          "Port": 8287
+          "Port": 8282
         },
         "Checks": [
           {

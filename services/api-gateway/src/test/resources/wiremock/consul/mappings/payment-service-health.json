@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "GET",
-    "urlPathPattern": "/v1/health/service/search-service.*"
+    "urlPathPattern": "/v1/health/service/payment-service.*"
   },
   "response": {
     "status": 200,
@@ -11,13 +11,13 @@
           "Address": "127.0.0.1"
         },
         "Service": {
-          "ID": "search-service-1",
-          "Service": "search-service",
-          "Port": 8286
+          "ID": "payment-service-1",
+          "Service": "payment-service",
+          "Port": 8287
         },
         "Checks": [
           {
-            "CheckID": "service:search-service-1",
+            "CheckID": "service:payment-service-1",
             "Status": "passing"
           }
         ]
