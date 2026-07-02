@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/v1/health/service/payment-service.*"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": [
+      {
+        "Node": {
+          "Address": "127.0.0.1"
+        },
+        "Service": {
+          "ID": "payment-service-1",
+          "Service": "payment-service",
+          "Port": 8287
+        },
+        "Checks": [
+          {
+            "CheckID": "service:payment-service-1",
+            "Status": "passing"
+          }
+        ]
+      }
+    ],
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}
