@@ -364,6 +364,49 @@ graph TD
 
 ### 8.2 Межсервисная аутентификация
 
+#### Валидация JWT в API Gateway и Downstream-сервисах
+
+**Критическая архитектурная парадигма:**
+- **API Gateway**: Проверка подлинности (authentication) — *кто ты?* (валидация JWT через Keycloak)
+- **Downstream-сервисы**: Проверка прав (authorization) — *что тебе можно?* (валидация ролей из JWT)
+
+**Правило №1: Downstream-сервисы НЕ доверяют заголовкам от API Gateway**
+
+- Заголовки `X-User-Id`, `X-User-Email`, `X-User-Name`, `X-User-Roles` могут быть подделаны или устареть
+- Каждый downstream-сервис должен валидировать JWT токен напрямую через Keycloak (Direct Integration)
+- Только после успешной валидации JWT можно использовать claims для принятия решений о доступе
+
+**Правило №2: RBAC проверяется на каждом уровне**
+
+```
+Client → API Gateway → [Downstream Service]
+        [Check JWT]       [Validate JWT + Check Roles]
+```
+
+- Gateway проверяет, что JWT валиден и не истёк
+- Downstream сервис проверяет, что пользователь имеет необходимые роли для выполнения операции
+- Роли из заголовков **не считаются надёжными** и используются только для логирования
+
+**Правило №3: Никогда не полагайтесь на X-User-Roles для авторизации**
+
+```java
+// ✅ ПРАВИЛЬНО: Проверка ролей по валидированному JWT
+@PreAuthorize("hasRole('BUYER')")
+@GetMapping
+public List<Product> getProducts() {
+    return productService.getAll();
+}
+
+// ❌ НЕПРАВИЛЬНО: Проверка по заголовку
+@GetMapping
+public List<Product> getProducts(@RequestHeader("X-User-Roles") String roles) {
+    if (roles.contains("BUYER")) {
+        return productService.getAll();
+    }
+    throw new AccessDeniedException();
+}
+```
+
 #### Для MVP (без TLS)
 - **Service Account Tokens через Keycloak**
   - Каждый сервис имеет свой service account в Keycloak

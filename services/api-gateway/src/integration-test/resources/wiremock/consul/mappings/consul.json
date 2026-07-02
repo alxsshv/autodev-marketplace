@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "/v1/catalog/services?wait=2s&token="
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "consul": [],
+      "platform-service": ["platform-service-1"],
+      "payment-service": ["payment-service-1"],
+      "catalog-service": ["catalog-service-1"],
+      "communication-service": ["communication-service-1"],
+      "order-service": ["order-service-1"],
+      "notification-service": ["notification-service-1"]
+    }
+  }
+}

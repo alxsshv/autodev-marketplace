@@ -8,6 +8,13 @@ spring:
   config:
     activate:
       on-profile: docker
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri:  ${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/autodev}
+
+
   cloud:
     gateway:
       discovery:
@@ -73,20 +80,21 @@ spring:
 
 
 management:
+
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
       base-path: /actuator  # явное указание базового пути
   endpoint:
+    consul:
+      enabled: false
     health:
       enabled: true
     prometheus:
       enabled: true
     metrics:
       enabled: true
-    security:
-      enabled: false  # отключение безопасности для Actuator (для диагностики)
     server:
       port: ${server.port}
 
