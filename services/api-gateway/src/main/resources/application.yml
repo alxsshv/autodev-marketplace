@@ -5,15 +5,26 @@ server:
 spring:
   application:
     name: api-gateway
+
   config:
     activate:
       on-profile: docker
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri:  ${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/autodev}
-
 
   cloud:
     gateway:
@@ -68,7 +79,6 @@ spring:
           filters:
             - RewritePath=/api/v1/(?<path>.*), /$\{path}
 
-
     consul:
       host: ${CONSUL_HOST:localhost}
       port: ${CONSUL_PORT:8500}
@@ -78,17 +88,19 @@ spring:
         health-check-interval: 15s
         prefer-ip-address: true
 
-
 management:
-
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
       base-path: /actuator  # явное указание базового пути
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
   endpoint:
     consul:
-      enabled: false
+      enabled: true
     health:
       enabled: true
     prometheus:
@@ -98,3 +110,13 @@ management:
     server:
       port: ${server.port}
 
+resilience4j:
+  ratelimiter:
+    metrics:
+      enabled: true
+
+app:
+  ratelimit:
+    limit-per-ip: 100
+    window-duration: 1m
+    timeout-duration: 100ms
