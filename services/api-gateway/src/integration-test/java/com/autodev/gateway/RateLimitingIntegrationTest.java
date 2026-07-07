@@ -10,8 +10,8 @@ import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.BeforeEach;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,38 +33,39 @@ import java.util.List;
 import java.util.Map;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @AutoConfigureWebTestClient
+@ActiveProfiles({"docker"})
+@EnableWireMock({
+        @ConfigureWireMock(name = "keycloak-rl", port = 8401),
+        @ConfigureWireMock(name = "platformService-rl", port = 8481, filesUnderClasspath = "wiremock/platform-service"),
+        @ConfigureWireMock(name = "consul-rl", port = 8483, filesUnderClasspath = "wiremock/consul"),
+})
 @TestPropertySource(properties = {
-        "spring.application.name=gateway-test",
-        "spring.cloud.consul.discovery.service-name=gateway-test",
+        "spring.application.name=gateway-test-rl",
+        "spring.cloud.consul.discovery.service-name=gateway-test-rl",
+
+        "app.ratelimit.limit-per-ip=2",
+        "app.ratelimit.window-duration=1m",
 
         "logging.level.org.springframework.cloud.gateway=DEBUG",
         "logging.level.org.springframework.cloud.consul=DEBUG",
+        "logging.level.com.autodev.gateway.filter=DEBUG",
         "spring.security.oauth2.resourceserver.jwt.cache-enabled=false"
 })
-@ActiveProfiles({"docker"})
-@EnableWireMock({
-        @ConfigureWireMock(name = "keycloak", port = 8201),
-        @ConfigureWireMock(name = "platformService", port = 8281, filesUnderClasspath = "wiremock/platform-service"),
-        @ConfigureWireMock(name = "orderService", port = 8282, filesUnderClasspath = "wiremock/order-service"),
-        @ConfigureWireMock(name = "consul", port = 8283, filesUnderClasspath = "wiremock/consul"),
-        @ConfigureWireMock(name = "catalogService", port = 8284, filesUnderClasspath = "wiremock/catalog-service"),
-        @ConfigureWireMock(name = "notificationService", port = 8285, filesUnderClasspath = "wiremock/notification-service"),
-        @ConfigureWireMock(name = "communicationService", port = 8286, filesUnderClasspath = "wiremock/communication-service"),
-        @ConfigureWireMock(name = "paymentService", port = 8287, filesUnderClasspath = "wiremock/payment-service"),
-})
 @Testcontainers
-@SuppressWarnings({"java:S2696", "java:S6813"})
-public abstract class AbstractIntegrationTest {
+@SuppressWarnings({"java:S2696", "java:S6813", "java:S1192", "java:S1313", "java:S1075"})
+class RateLimitingIntegrationTest {
 
-    private static final Logger log = LoggerFactory.getLogger(AbstractIntegrationTest.class);
-    static final int CONSUL_PORT = 8283;
-    static final int KEYCLOAK_PORT = 8201;
+    static final int CONSUL_PORT = 8483;
+    static final int KEYCLOAK_PORT = 8401;
 
     static final String KID = "test-kid-1";
     static final String ISSUER = "http://localhost:" + KEYCLOAK_PORT + "/realms/autodev";
+
+    static final String PATH = "/api/v1/platform/users";
 
     @Autowired
     protected WebTestClient webTestClient;
@@ -72,43 +73,24 @@ public abstract class AbstractIntegrationTest {
     @Autowired
     protected RedisTemplate<String, String> redisTemplate;
 
-    @InjectWireMock("platformService")
+    @InjectWireMock("platformService-rl")
     WireMockServer platformService;
 
-    @InjectWireMock("orderService")
-    WireMockServer orderService;
-
-    @InjectWireMock("consul")
+    @InjectWireMock("consul-rl")
     WireMockServer consul;
 
-    @InjectWireMock("catalogService")
-    WireMockServer catalogService;
-
-    @InjectWireMock("communicationService")
-    WireMockServer communicationService;
-
-    @InjectWireMock("paymentService")
-    WireMockServer paymentService;
-
-    @InjectWireMock("notificationService")
-    WireMockServer notificationService;
-
-    @InjectWireMock("keycloak")
+    @InjectWireMock("keycloak-rl")
     WireMockServer keycloak;
 
-    static {
-        System.setProperty("REDIS_HOST", TestRedisContainer.getHost());
-        System.setProperty("REDIS_PORT", TestRedisContainer.getPort().toString());
-    }
-
-
     @DynamicPropertySource
-    static void setConsulProperties(DynamicPropertyRegistry registry) {
+    static void setProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.cloud.consul.host", () -> "localhost");
         registry.add("spring.cloud.consul.port", () -> CONSUL_PORT);
         registry.add("spring.cloud.consul.discovery.enabled", () -> "true");
         registry.add("management.endpoint.health.consul.enabled", () -> false);
         registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> ISSUER);
+        registry.add("spring.data.redis.host", TestRedisContainer::getHost);
+        registry.add("spring.data.redis.port", TestRedisContainer::getPort);
     }
 
     static RSAKey rsaKey;
@@ -116,15 +98,12 @@ public abstract class AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() throws JOSEException {
-        log.info("============= check token ============");
         if (jwt == null) {
-            log.info("============= generate token ============");
             rsaKey = new RSAKeyGenerator(2048).keyID(KID).generate();
             PrivateKey privateKey = rsaKey.toRSAPrivateKey();
             jwt = generateValidJwt(privateKey);
         }
 
-        log.info("============= check stubMappings ============");
         if (keycloak.getStubMappings().isEmpty()) {
             String baseUrl = "http://localhost:" + KEYCLOAK_PORT;
             String openidConfig = """
@@ -148,17 +127,12 @@ public abstract class AbstractIntegrationTest {
                             .withBody(jwksSet)));
         }
 
-        // Исправленная очистка Redis: используем sync().flushdb() вместо устаревшего flushDb()
         redisTemplate.execute((RedisConnection connection) -> {
             connection.serverCommands().flushDb();
             return "OK";
         });
-        log.info("Redis flushed (FLUSHDB) before test execution.");
     }
 
-    /**
-     * Генерация JWT с тем же приватным ключом
-     */
     private String generateValidJwt(PrivateKey privateKey) throws JOSEException {
         long oneHourInMillis = 3600000L;
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
@@ -183,5 +157,94 @@ public abstract class AbstractIntegrationTest {
         return signedJWT.serialize();
     }
 
+    @Test
+    @DisplayName("Превышение лимита запросов — 429 Too Many Requests с Retry-After")
+    void testRateLimitExceeded() {
+        String ip = "10.0.0.1";
 
+        webTestClient.get().uri(PATH)
+                .header("Authorization", "Bearer " + jwt)
+                .header("X-Forwarded-For", ip)
+                .exchange()
+                .expectStatus().isOk();
+
+        webTestClient.get().uri(PATH)
+                .header("Authorization", "Bearer " + jwt)
+                .header("X-Forwarded-For", ip)
+                .exchange()
+                .expectStatus().isOk();
+
+        webTestClient.get().uri(PATH)
+                .header("Authorization", "Bearer " + jwt)
+                .header("X-Forwarded-For", ip)
+                .exchange()
+                .expectStatus().isEqualTo(429)
+                .expectHeader().exists("Retry-After");
+    }
+
+    @Test
+    @DisplayName("Исключённый путь /actuator не лимитируется")
+    @SuppressWarnings("java:S5960")
+    void testExcludedPath() {
+        for (int i = 0; i < 5; i++) {
+            webTestClient.get().uri("/actuator/health")
+                    .exchange()
+                    .expectStatus().value(rawStatus -> assertThat(rawStatus).isNotEqualTo(429));
+        }
+    }
+
+    @Test
+    @DisplayName("Разные IP имеют независимые счётчики лимитов")
+    void testDifferentIps() {
+        for (int i = 0; i < 2; i++) {
+            webTestClient.get().uri(PATH)
+                    .header("Authorization", "Bearer " + jwt)
+                    .header("X-Forwarded-For", "10.0.0.1")
+                    .exchange()
+                    .expectStatus().isOk();
+        }
+
+        webTestClient.get().uri(PATH)
+                .header("Authorization", "Bearer " + jwt)
+                .header("X-Forwarded-For", "10.0.0.1")
+                .exchange()
+                .expectStatus().isEqualTo(429);
+
+        for (int i = 0; i < 2; i++) {
+            webTestClient.get().uri(PATH)
+                    .header("Authorization", "Bearer " + jwt)
+                    .header("X-Forwarded-For", "10.0.0.2")
+                    .exchange()
+                    .expectStatus().isOk();
+        }
+
+        webTestClient.get().uri(PATH)
+                .header("Authorization", "Bearer " + jwt)
+                .header("X-Forwarded-For", "10.0.0.2")
+                .exchange()
+                .expectStatus().isEqualTo(429);
+    }
+
+    @Test
+    @DisplayName("IP из заголовка X-Forwarded-For: берётся последний IP из цепочки")
+    void testXForwardedForLastIp() {
+
+        webTestClient.get().uri(PATH)
+                .header("Authorization", "Bearer " + jwt)
+                .header("X-Forwarded-For", "10.0.0.1, 10.0.0.2, 10.0.0.3")
+                .exchange()
+                .expectStatus().isOk();
+
+        webTestClient.get().uri(PATH)
+                .header("Authorization", "Bearer " + jwt)
+                .header("X-Forwarded-For", "10.0.0.1, 10.0.0.2, 10.0.0.3")
+                .exchange()
+                .expectStatus().isOk();
+
+        webTestClient.get().uri(PATH)
+                .header("Authorization", "Bearer " + jwt)
+                .header("X-Forwarded-For", "10.0.0.1, 10.0.0.2, 10.0.0.3")
+                .exchange()
+                .expectStatus().isEqualTo(429);
+    }
 }

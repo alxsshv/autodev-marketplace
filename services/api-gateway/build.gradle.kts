@@ -43,13 +43,19 @@ dependencies {
     implementation(libs.spring.boot.actuator)
     implementation(libs.spring.boot.security)
     implementation(libs.spring.boot.resourceServer)
+    implementation(libs.spring.boot.data.redis)
     implementation(libs.spring.cloud.consul)
     implementation(libs.spring.cloud.gateway)
+
+    // RATE LIMITING
+    implementation(libs.bundles.resilence4j)
+    implementation(libs.resilence4j.ratelimiter)
 
     // OBSERVABILITY
     implementation(libs.micrometer.prometheus)
 
     // HELPERS
+    implementation(libs.apache.commons.pool)
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
 
@@ -69,7 +75,8 @@ dependencies {
     integrationTestImplementation(libs.spring.cloud.gateway)
     integrationTestImplementation(libs.wiremock.spring)
     integrationTestImplementation(libs.nimbus.jwt)
-    integrationTestRuntimeOnly(libs.bundles.junit.jupiter)
+    integrationTestImplementation(libs.bundles.testcontainers)
+    integrationTestImplementation(libs.bundles.junit.jupiter)
 
 }
 
@@ -84,6 +91,9 @@ tasks.register<Test>("integrationTest") {
 
     useJUnitPlatform()
     shouldRunAfter(tasks.test)
+
+    testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+    classpath = sourceSets["integrationTest"].runtimeClasspath
 
     reports {
         html.required.set(true)
