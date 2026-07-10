@@ -1,9 +1,6 @@
-stages:
-  - test
-
-test_minikube_runner:
-  tags:
-    - minikube # Обязательно указываем тег, который мы задавали в values.yaml
+test-runner:
+  image: alpine:latest
   script:
-    - echo "Привет! Я успешно работаю внутри Minikube!"
-    - docker info # Проверяем, доступен ли Docker внутри раннера
+    - echo "Kubernetes executor запущен!"
+    - apk add curl
+    - curl -k https://alxsshv.com
