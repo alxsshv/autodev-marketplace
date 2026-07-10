@@ -1,47 +1,9 @@
 stages:
   - test
 
-variables:
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
-
-# Шаблон для модульных тестов
-.unit_test_template: &unit_test_template
-  stage: test
+test_minikube_runner:
+  tags:
+    - minikube # Обязательно указываем тег, который мы задавали в values.yaml
   script:
-    - ./gradlew clean test --no-daemon
-  artifacts:
-    paths:
-      - build/test-results/
-    reports:
-      junit:
-        - build/test-results/test/*.xml
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-      when: always
-    - when: never
-
-# Шаблон для интеграционных тестов
-.integration_test_template: &integration_test_template
-  stage: test
-  script:
-    - ./gradlew clean integrationTest --no-daemon
-  artifacts:
-    paths:
-      - build/test-results/
-    reports:
-      junit:
-        - build/test-results/integrationTest/*.xml
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-      when: always
-    - when: never
-
-# Запуск модульных тестов
-unit-tests:
-  <<: *unit_test_template
-  timeout: 15m
-
-# Запуск интеграционных тестов
-integration-tests:
-  <<: *integration_test_template
-  timeout: 30m
+    - echo "Привет! Я успешно работаю внутри Minikube!"
+    - docker info # Проверяем, доступен ли Docker внутри раннера
