@@ -39,10 +39,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.*;
 @TestPropertySource(properties = {
         "spring.application.name=gateway-test",
         "spring.cloud.consul.discovery.service-name=gateway-test",
-
         "logging.level.org.springframework.cloud.gateway=DEBUG",
         "logging.level.org.springframework.cloud.consul=DEBUG",
-        "spring.security.oauth2.resourceserver.jwt.cache-enabled=false"
+        "spring.security.oauth2.resourceserver.jwt.cache-enabled=false",
+        "cors.allowed-origins=http://localhost:3000",
+        "spring.webflux.cors.enabled=false"
 })
 @ActiveProfiles({"docker"})
 @EnableWireMock({
