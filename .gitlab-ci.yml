@@ -1,47 +1,112 @@
 stages:
+  - build
   - test
+  - integration-test
+  - coverage
+  - mr-checks
 
 variables:
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
+  # Токен для API GitLab (создайте в Settings → CI/CD → Variables с правами api)
+  GITLAB_API_TOKEN: $GITLAB_API_TOKEN
 
-# Шаблон для модульных тестов
-.unit_test_template: &unit_test_template
-  stage: test
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .gradle/wrapper
+    - .gradle/caches
+    - build
+
+# 1. Компиляция и подготовка тестовых классов
+build:
+  stage: build
+  image: gradle:8.5-jdk17   # при необходимости замените версию JDK
   script:
-    - ./gradlew clean test --no-daemon
+    - gradle classes testClasses integrationTestClasses
   artifacts:
     paths:
-      - build/test-results/
-    reports:
-      junit:
-        - build/test-results/test/*.xml
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-      when: always
-    - when: never
+      - build
+    expire_in: 1 hour
 
-# Шаблон для интеграционных тестов
-.integration_test_template: &integration_test_template
-  stage: test
-  script:
-    - ./gradlew clean integrationTest --no-daemon
-  artifacts:
-    paths:
-      - build/test-results/
-    reports:
-      junit:
-        - build/test-results/integrationTest/*.xml
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
-      when: always
-    - when: never
-
-# Запуск модульных тестов
+# 2. Юнит-тесты
 unit-tests:
-  <<: *unit_test_template
-  timeout: 15m
+  stage: test
+  image: gradle:8.5-jdk17
+  script:
+    - gradle test
+  artifacts:
+    when: always
+    reports:
+      junit: "**/build/test-results/test/TEST-*.xml"
+    paths:
+      - "**/build/test-results/test"
+      - "**/build/reports/tests/test"
 
-# Запуск интеграционных тестов
+# 3. Интеграционные тесты (зависит от Testcontainers и других сервисов)
 integration-tests:
-  <<: *integration_test_template
-  timeout: 30m
+  stage: integration-test
+  image: gradle:8.5-jdk17
+  script:
+    - gradle integrationTest
+  artifacts:
+    when: always
+    reports:
+      junit: "**/build/test-results/integrationTest/TEST-*.xml"
+    paths:
+      - "**/build/test-results/integrationTest"
+      - "**/build/reports/tests/integrationTest"
+  # Если требуются контейнеры (Testcontainers с Docker), нужен раннер с доступом к Docker daemon.
+  # Например, для Kubernetes executor можно использовать DinD, но проще подключить docker-сервис.
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+
+# 4. Покрытие кода (только для MR)
+coverage:
+  stage: coverage
+  image: gradle:8.5-jdk17
+  script:
+    - gradle jacocoAggregatedReport
+    - |
+      COVERAGE=$(grep -oP '<counter type="LINE" missed="\d+" covered="\d+"/>' build/reports/jacoco/jacocoAggregatedReport/jacocoAggregatedReport.xml | tr '"' '\n' | grep -E '^[0-9]+$' | paste - - | awk '{printf "%.2f", ($2/($1+$2))*100}')
+      echo "Coverage: $COVERAGE%"
+  coverage: "/Coverage: \\d+\\.\\d+%/"
+  artifacts:
+    paths:
+      - build/reports/jacoco/jacocoAggregatedReport
+    expire_in: 30 days
+  only:
+    - merge_requests
+
+# 5. Проверка размера MR (блокируем, если добавлено > 1000 строк)
+mr-size-check:
+  stage: mr-checks
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      if [ -z "$CI_MERGE_REQUEST_IID" ]; then
+        echo "Pipeline not triggered by merge request, skipping"
+        exit 0
+      fi
+
+      # Получаем изменения MR через GitLab API
+      MR_CHANGES=$(curl -s --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
+        "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/changes")
+
+      # Подсчитываем добавленные строки (начинающиеся с +, но не с +++ (заголовки diff))
+      ADDED_LINES=$(echo "$MR_CHANGES" | jq '[.changes[]?.diff] | join("\n") | split("\n") | map(select(startswith("+") and (startswith("+++") | not))) | length')
+
+      echo "Lines added in MR: $ADDED_LINES"
+
+      if [ "$ADDED_LINES" -gt 1000 ]; then
+        echo "ERROR: MR contains more than 1000 added lines ($ADDED_LINES). Please split into smaller merge requests."
+        exit 1
+      else
+        echo "MR size is acceptable."
+      fi
+  only:
+    - merge_requests
