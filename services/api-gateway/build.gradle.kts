@@ -54,6 +54,8 @@ dependencies {
 
     // OBSERVABILITY
     implementation(libs.micrometer.prometheus)
+    implementation(libs.micrometer.tracing.bridge)
+    implementation(libs.opentelemetry.exporter)
 
     // HELPERS
     implementation(libs.apache.commons.pool)
