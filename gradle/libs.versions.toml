@@ -35,6 +35,8 @@ resilence4j-micrometer = { group = "io.github.resilience4j", name = "resilience4
 
 # Observability
 micrometer-prometheus = { group = "io.micrometer", name = "micrometer-registry-prometheus" }
+micrometer-tracing-bridge = {group = "io.micrometer", name = "micrometer-tracing-bridge-otel"}
+opentelemetry-exporter = {group = "io.opentelemetry", name = "opentelemetry-exporter-otlp"}
 
 # Helpers
 lombok = { group = "org.projectlombok", name = "lombok", version.ref = "lombok" }
@@ -50,6 +52,7 @@ reactor-test = { group = "io.projectreactor", name = "reactor-test", version.ref
 nimbus-jwt = { group = "com.nimbusds", name = "nimbus-jose-jwt", version.ref = "nimbus" }
 testcontainers = {group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers"}
 testcontainers-junit = {group = "org.testcontainers", name = "testcontainers-junit-jupiter", version.ref = "testcontainers"}
+
 
 
 [bundles]

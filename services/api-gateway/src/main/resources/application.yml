@@ -92,11 +92,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info,prometheus, metrics
       base-path: /actuator  # явное указание базового пути
   metrics:
     tags:
       application: ${spring.application.name}
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
+  otlp:
+    tracing:
+      endpoint: ${ALLOY_OTLP_URL:http://alloy:4317}
 
   endpoint:
     consul:
