@@ -85,7 +85,7 @@ tasks.withType<Test> {
 tasks.test {
     // Явно указываем путь к файлу данных покрытия
     extensions.configure<JacocoTaskExtension> {
-        destinationFile = file("$buildDir/jacoco/test.exec")
+        destinationFile = layout.buildDirectory.file("jacoco/test.exec").get().asFile
     }
 }
 
@@ -108,7 +108,7 @@ tasks.register<Test>("integrationTest") {
 
     // Включаем запись данных покрытия для интеграционных тестов
     extensions.configure<JacocoTaskExtension> {
-        destinationFile = file("$buildDir/jacoco/integrationTest.exec")
+        destinationFile = layout.buildDirectory.file("jacoco/integrationTest.exec").get().asFile
     }
 }
 
