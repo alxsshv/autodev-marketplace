@@ -41,11 +41,19 @@ unit-tests:
     paths:
       - "**/build/test-results/test"
       - "**/build/reports/tests/test"
+      - "build/jacoco/*.exec"
+      - "build/jacoco/*.ec"
 
 # 3. Интеграционные тесты (зависит от Testcontainers и других сервисов)
 integration-tests:
   stage: integration-test
   image: gradle:8.5-jdk17
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""        # исправление зависания из предыдущего ответа
   script:
     - gradle integrationTest
   artifacts:
@@ -55,20 +63,24 @@ integration-tests:
     paths:
       - "**/build/test-results/integrationTest"
       - "**/build/reports/tests/integrationTest"
-  # Если требуются контейнеры (Testcontainers с Docker), нужен раннер с доступом к Docker daemon.
-  # Например, для Kubernetes executor можно использовать DinD, но проще подключить docker-сервис.
-  services:
-    - docker:dind
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_DRIVER: overlay2
+      # ↓ добавляем файлы данных для jacoco
+      - "build/jacoco/*.exec"
+      - "build/jacoco/*.ec"
 
 # 4. Покрытие кода (только для MR)
 coverage:
   stage: coverage
   image: gradle:8.5-jdk17
+  needs:                         # явно загружаем артефакты от сборки и тестов
+    - job: build
+      artifacts: true
+    - job: unit-tests
+      artifacts: true
+    - job: integration-tests
+      artifacts: true
   script:
-    - gradle jacocoAggregatedReport
+    # Запрещаем Gradle перезапускать тесты – только отчёт
+    - gradle jacocoAggregatedReport -x test -x integrationTest
     - |
       COVERAGE=$(grep -oP '<counter type="LINE" missed="\d+" covered="\d+"/>' build/reports/jacoco/jacocoAggregatedReport/jacocoAggregatedReport.xml | tr '"' '\n' | grep -E '^[0-9]+$' | paste - - | awk '{printf "%.2f", ($2/($1+$2))*100}')
       echo "Coverage: $COVERAGE%"

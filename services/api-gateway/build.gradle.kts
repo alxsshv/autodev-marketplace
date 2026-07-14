@@ -7,12 +7,8 @@ plugins {
     id("io.spring.dependency-management")
 }
 
-
-
-
 sourceSets {
     create("integrationTest") {
-
         java {
             srcDir("src/integration-test/java")
         }
@@ -38,7 +34,6 @@ dependencyManagement {
     }
 }
 
-
 dependencies {
     // SPRING
     implementation(libs.spring.boot.actuator)
@@ -62,7 +57,7 @@ dependencies {
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
 
-    //TEST
+    // TEST
     testImplementation(libs.spring.boot.test)
     testImplementation(libs.spring.cloud.loadbalancer)
     testImplementation(libs.mockito.junit)
@@ -80,14 +75,21 @@ dependencies {
     integrationTestImplementation(libs.nimbus.jwt)
     integrationTestImplementation(libs.bundles.testcontainers)
     integrationTestImplementation(libs.bundles.junit.jupiter)
-
 }
-
 
 tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+// Стандартные юнит-тесты
+tasks.test {
+    // Явно указываем путь к файлу данных покрытия
+    extensions.configure<JacocoTaskExtension> {
+        destinationFile = file("$buildDir/jacoco/test.exec")
+    }
+}
+
+// Интеграционные тесты
 tasks.register<Test>("integrationTest") {
     group = "verification"
     description = "Runs integration tests..."
@@ -103,22 +105,29 @@ tasks.register<Test>("integrationTest") {
         junitXml.required.set(true)
     }
     timeout.set(Duration.ofMinutes(10))
+
+    // Включаем запись данных покрытия для интеграционных тестов
+    extensions.configure<JacocoTaskExtension> {
+        destinationFile = file("$buildDir/jacoco/integrationTest.exec")
+    }
 }
 
 tasks.check {
     dependsOn("integrationTest")
 }
 
+// Агрегированный отчёт JaCoCo
 tasks.register<JacocoReport>("jacocoAggregatedReport") {
     group = "verification"
     description = "Generates aggregated JaCoCo coverage report for all subprojects"
 
-    dependsOn(tasks.test, tasks.named("integrationTest"))
+    // Удалена жёсткая зависимость, чтобы тесты не перезапускались в CI-джобе coverage
+    // dependsOn(tasks.test, tasks.named("integrationTest"))
 
     // Собираем execution data из всех подпроектов
     executionData(fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec"))
 
-    // Указываем исходники и классы для анализа (можно перечислить все подпроекты)
+    // Указываем исходники и классы для анализа
     subprojects.forEach { subproject ->
         subproject.plugins.withType<JavaPlugin> {
             sourceSets(subproject.sourceSets.main.get())
