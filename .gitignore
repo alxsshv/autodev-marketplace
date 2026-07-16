@@ -6,5 +6,10 @@ build
 
 # Ignore Kotlin plugin data
 .kotlin
+amplicode.xml
 
 .gigacode/.gtilab_token
+.idea
+/.gigacode/
+
+/.gigacode/prompts/

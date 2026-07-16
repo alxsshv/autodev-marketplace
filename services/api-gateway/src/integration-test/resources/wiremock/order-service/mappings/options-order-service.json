@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "OPTIONS",
+    "url": "/orders"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Request-ID, X-Language",
+      "Access-Control-Max-Age": "3600",
+      "Content-Length": "0"
+    },
+    "body": ""
+  }
+}
