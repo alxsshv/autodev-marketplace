@@ -1,322 +1,180 @@
 # Стандарты межсервисной коммуникации для AutoDev Marketplace
 
-**Версия документа:** 1.0  
-**Дата создания:** 2026-07-01  
-**Последнее обновление:** 2026-07-01  
-**Статус:** Документ архитектурных стандартов
+Версия документа: 2.0
+Дата создания: 2026-07-01
+Последнее обновление: 2026-07-13
+Статус: Документ архитектурных стандартов (Актуально для 6 сервисов MVP)
 
 ---
 
 ## Предисловие
 
-Этот документ определяет стандарты межсервисной коммуникации для микросервисной архитектуры AutoDev Marketplace. Он описывает правила передачи данных между сервисами, форматы сообщений, заголовки и другие важные аспекты.
+Этот документ определяет стандарты межсервисной коммуникации. В версии 2.0 мы полностью отказались от подхода "API Gateway парсит JWT и пробрасывает внутренние заголовки" в пользу Direct JWT Propagation (Слепой прокси).
+
+Это устраняет критическое противоречие, повышает безопасность (Zero-Trust между сервисами) и полностью соответствует стандартам Spring Security OAuth2 Resource Server.
 
 ---
 
-## Заголовки для передачи claims из JWT токена
+# 1. Синхронная коммуникация (REST / OpenFeign)
+##   1.1. Правило распространения аутентификации (JWT)
 
-### Цель
+### API Gateway:
 
-При прохождении запроса через API Gateway claims из JWT токена должны быть извлечены и переданы downstream сервисам через HTTP headers. Это позволяет сервисам знать о пользователе без необходимости повторной валидации JWT токена.
+- Выступает в роли слепого прокси (Blind Proxy).
+- НЕ валидирует JWT токен.
+- НЕ извлекает claims (sub, roles, email).
+- Пробрасывает заголовок Authorization: Bearer <token> в downstream-сервисы без изменений.
 
-### Стандартизированные заголовки
+### Downstream-сервисы (Catalog, Order, Platform и др.):
 
-| Заголовок | JWT Claim | Описание | Обязательный | Пример значения |
-|-----------|-----------|----------|-------------|-----------------|
-| `X-User-Id` | `sub` | Уникальный идентификатор пользователя | Да | `550e8400-e29b-41d4-a716-446655440000` |
-| `X-User-Email` | `email` | Email пользователя | Да | `user@example.com` |
-| `X-User-Name` | `preferred_username` или `name` | Имя пользователя | Да | `ivan_ivanov` |
-| `X-User-Roles` | `roles` или `realm_access.roles` | Роли пользователя | Да | `BUYER,MODERATOR` |
-| `traceparent` | — | OpenTelemetry Trace Context (W3C Trace Context) | Да | `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01` |
-| `tracestate` | — | OpenTelemetry Trace Context ( Vendor-specific trace state) | Нет | `congo=t61rcWkgMzE` |
+- Настроены как OAuth2 Resource Server.
+- Самостоятельно валидируют подпись JWT через JWK (Public Keys) от Keycloak.
+- Самостоятельно извлекают sub (User ID), email и realm_access.roles в SecurityContext.
+- Принимают решения об авторизации (@PreAuthorize) на основе валидированного JWT, а не заголовков.
 
-**Примечание:** Вместо кастомного `X-Request-ID` используется стандартный `traceparent` заголовок по W3C Trace Context, который поддерживается OpenTelemetry и интегрируется с Tempo для трейсинга и Loki для логирования.
 
-### Схема передачи claims
+## 1.2. Межсервисные вызовы (Service-to-Service)
 
-```
-Client Request (with JWT token)
-    ↓
-[API Gateway]
-    ↓
-1. Валидация JWT токена через Keycloak
-2. Извлечение claims из токена
-3. Добавление standard headers в запрос
-    ↓
-Downstream Service (receives claims via headers)
-```
+Когда сервису A нужно синхронно вызвать сервис B (например, Order Service проверяет наличие в Catalog Service через OpenFeign), токен текущего пользователя также должен быть передан.
 
-**ВАЖНО: Downstream-сервисы должны самостоятельно валидировать JWT и проверять роли, а не доверять заголовкам.**
-
-### Критические правила безопасности для Downstream-сервисов
-
-1. **Самостоятельная валидация JWT**:
-   - Каждый downstream-сервис должен валидировать JWT токен через Keycloak или кэш в Redis
-   - Нельзя полагаться только на заголовки (X-User-Id, X-User-Roles и т.д.)
-   - Заголовки могут быть подделаны или устареть
-
-2. **Проверка ролей (RBAC)**:
-   - Downstream-сервисы должны извлекать роли из JWT токена, а не из заголовков
-   - Проверка ролей должна происходить на каждом endpoint перед выполнением операции
-   - Даже если заголовок `X-User-Roles` присутствует, он не может быть единственным источником прав
-
-3. **Доверие к заголовкам**:
-   - Заголовки (X-User-Id, X-User-Email, X-User-Name) могут использоваться только для:
-     - Логирования (MDC, аудит)
-     - Персонализации ответов
-     - Улучшения user experience
-   - Заголовки НИКОГДА не должны использоваться для принятия решений о доступе
-
-4. **Приоритет источников**:
-   - Источник 1 (наивысший приоритет): JWT токен, валидированный через Keycloak
-   - Источник 2: Кэшированный JWT в Redis (если токен валиден и не истёк)
-   - Источник 3 (низкий приоритет): Заголовки для логирования (только после валидации токена)
-
-### Пример правильной реализации в downstream-сервисе
-
-```java
-@RestController
-@RequestMapping("/api/v1/products")
-public class ProductController {
-    
-    @PreAuthorize("hasRole('BUYER')")
-    @GetMapping
-    public List<ProductDto> getAllProducts() {
-        // Spring Security автоматически проверит роли из JWT, а не из заголовков
-        return productService.getAllProducts();
-    }
-    
-    @PreAuthorize("hasRole('SELLER')")
-    @PostMapping
-    public ProductDto createProduct(@RequestBody ProductCreateDto dto) {
-        // Даже если заголовок X-User-Roles содержит SELLER,
-        // проверка происходит по валидированному JWT токену
-        return productService.createProduct(dto);
-    }
-}
-```
-
-**НЕПРАВИЛЬНО:**
-
-```java
-// ❌ ПЛОХОЙ ПРИМЕР - НЕ СЛЕДУЕТ ПИСАТЬ ТАК
-@GetMapping
-public List<ProductDto> getAllProducts(@RequestHeader("X-User-Roles") String roles) {
-    if (roles.contains("SELLER")) {
-        // Так делать нельзя! Заголовок может быть подделан
-        return productService.getAllProducts();
-    }
-    throw new AccessDeniedException("Access denied");
-}
-```
-
-### Пример конфигурации API Gateway
-
-```java
-@Bean
-public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-    http
-        .oauth2ResourceServer(oauth2 -> oauth2
-            .jwt(jwt -> jwt
-                .jwtAuthenticationConverter(jwtAuthenticationConverter())
-            )
-        )
-        .authorizeHttpRequests(authz -> authz
-            .requestMatchers("/actuator/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-            .anyRequest().authenticated()
-        );
-    
-    return http.build();
-}
-
-@Bean
-public JwtAuthenticationConverter jwtAuthenticationConverter() {
-    JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-    
-    // Настройка конвертера для извлечения claims и добавления их в headers
-    converter.setJwtGrantedAuthoritiesConverter(jwt -> {
-        // Извлечение ролей из JWT
-        Collection<SimpleGrantedAuthority> authorities = new ArrayList<>();
-        
-        // Проверка realm_access.roles
-        Map<String, Object> realmAccess = jwt.getClaim("realm_access");
-        if (realmAccess != null && realmAccess.containsKey("roles")) {
-            ((List<String>) realmAccess.get("roles")).forEach(role -> 
-                authorities.add(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
-            );
-        }
-        
-        // Проверка resource_access для client-level roles
-        Map<String, Object> resourceAccess = jwt.getClaim("resource_access");
-        if (resourceAccess != null) {
-            resourceAccess.forEach((client, access) -> {
-                if (access instanceof Map) {
-                    ((List<String>) ((Map<String, Object>) access).get("roles")).forEach(role -> 
-                        authorities.add(new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
-                    );
-                }
-            });
-        }
-        
-        return authorities;
-    });
-    
-    return converter;
-}
-```
-
-### Пример pre-filter для добавления headers в Spring Cloud Gateway
+Стандарт: Использование FeignRequestInterceptor для проброса текущего контекста безопасности.
 
 ```java
 @Component
-public class ClaimsPropagationFilter implements GlobalFilter {
+public class JwtFeignInterceptor implements RequestInterceptor {
     
     @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        ServerHttpRequest request = exchange.getRequest();
-        
-        // Извлечение Authentication из SecurityContext
+    public void apply(RequestTemplate template) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         
-        if (authentication instanceof JwtAuthenticationToken) {
-            Jwt jwt = (Jwt) authentication.getPrincipal();
-            
-            // Формирование новых заголовков
-            MultiValueMap<String, String> headers = new LinkedMultiValueMap<>();
-            headers.add("X-User-Id", jwt.getSubject());
-            headers.add("X-User-Email", jwt.getClaimAsString("email"));
-            headers.add("X-User-Name", jwt.getClaimAsString("preferred_username"));
-            headers.add("X-User-Roles", String.join(",", jwt.getClaimAsStringArray("roles")));
-            
-            // OpenTelemetry Trace Context (W3C Trace Context)
-            // traceparent и tracestate автоматически передаются через Spring Cloud Gateway
-            // или могут быть добавлены вручную если нужно
-            headers.add("traceparent", jwt.getClaimAsString("traceparent"));
-            headers.add("tracestate", jwt.getClaimAsString("tracestate"));
-            
-            // Создание нового запроса с обновлёнными заголовками
-            ServerHttpRequest newRequest = request.mutate()
-                .headers(httpHeaders -> {
-                    httpHeaders.addAll(headers);
-                })
-                .build();
-            
-            return chain.filter(exchange.mutate().request(newRequest).build());
+        if (authentication instanceof JwtAuthenticationToken jwtAuth) {
+            String tokenValue = jwtAuth.getToken().getTokenValue();
+            template.header("Authorization", "Bearer " + tokenValue);
         }
-        
-        return chain.filter(exchange);
     }
 }
 ```
 
-**Примечание:** Spring Cloud Gateway автоматически передаёт `traceparent` и `tracestate` заголовки (OpenTelemetry Trace Context) между сервисами. Это обеспечивает согласованность трейсинга через всю цепочку сервисов с интеграцией в Tempo и Loki.
+## 1.3. Запрещенные практики (Антипаттерны)
 
----
+- ❌ ЗАПРЕЩЕНО формировать и передавать заголовки X-User-Id, X-User-Email, X-User-Roles из Gateway или между сервисами.
+- ❌ ЗАПРЕЩЕНО читать пользовательские данные из заголовков в downstream-сервисах для принятия бизнес-решений (это нарушает Zero-Trust).
+- ❌ ЗАПРЕЩЕНО удалять или подменять заголовок Authorization при маршрутизации.
 
-## Стандарты HTTP заголовков для API
+# 2. Асинхронная коммуникация (Apache Kafka)
+Поскольку в асинхронном взаимодействии нет HTTP-запроса и заголовков, контекст пользователя и запроса должен быть встроен в тело сообщения (Payload).
 
-### Обязательные заголовки для всех API запросов
-
-| Заголовок | Обязательный | Описание |
-|-----------|-------------|----------|
-| `Authorization` | Да | JWT токен в формате `Bearer {token}` |
-| `Content-Type` | Да | `application/json` для JSON запросов |
-| `Accept` | Да | `application/json` |
-| `traceparent` | Да | OpenTelemetry Trace Context (W3C Trace Context) |
-
-### Рекомендуемые заголовки
-
-| Заголовок | Описание | Пример |
-|-----------|----------|--------|
-| `X-Language` | Язык интерфейса | `ru-RU`, `en-US` |
-| `X-Timezone` | Часовой пояс | `Europe/Moscow` |
-| `X-Device-Info` | Информация об устройстве | `web/1.0.0`, `mobile/2.1.0` |
-
-### Заголовки ответов
-
-| Заголовок | Описание |
-|-----------|----------|
-| `Content-Type` | `application/json` |
-| `traceparent` | OpenTelemetry Trace Context из запроса |
-| `X-RateLimit-Limit` | Лимит запросов (если используется rate limiting) |
-| `X-RateLimit-Remaining` | Оставшееся количество запросов |
-| `X-RateLimit-Reset` | Время сброса лимита (Unix timestamp) |
-
----
-
-## Обработка ошибок
-
-### Стандартные заголовки ошибок
-
-| Заголовок | Описание |
-|-----------|----------|
-| `X-Error-Code` | Код ошибки (машиночитаемый) |
-| `X-Error-Message` | Сообщение об ошибке (человекочитаемое) |
-| `X-Trace-ID` | ID трейса для диагностики |
-
-### Пример ответа с ошибкой
+## 2.1. Стандарт формата события (CloudEvents)
+Все события в Kafka должны соответствовать формату CloudEvents (упрощенная версия) для унификации обработки.
 
 ```json
 {
-  "errorCode": "VALIDATION_ERROR",
-  "message": "Invalid email format",
-  "timestamp": "2026-07-01T12:34:56Z",
-  "path": "/api/v1/platform/users/register"
+  "eventId": "3f7b1c92-8e45-4f7a-9d6c-1e2b3a4d5c6e",
+  "eventType": "autodev.order.created.v1",
+  "timestamp": "2026-07-13T10:00:00Z",
+  "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "orderId": "ord_12345",
+    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "userEmail": "buyer@example.com",
+    "totalAmount": 5000.00,
+    "items": []
+  }
 }
 ```
 
-С заголовками:
+Важно: Поле userId и другие данные пользователя дублируются в payload события. Consumer-сервис (Notification Service) не может запросить JWT токен, поэтому он должен получить идентификатор пользователя из самого события.
+
+
+## 2.2. Паттерн Transactional Outbox (Стандарт публикации)
+Для гарантированной доставки событий (чтобы не потерять данные при падении приложения после коммита БД) используется паттерн Outbox:
+
+- Сервис пишет бизнес-данные и событие в таблицу outbox_events в одной транзакции (@Transactional).
+- Фоновый джоб (Scheduled Task) читает не отправленные события из outbox и публикует их в Kafka через KafkaTemplate.
+- После успешного подтверждения (ack) от Kafka, событие помечается как отправленное.
+
+## 2.3. Паттерн Idempotent Consumer (Стандарт потребления)
+Consumer-сервисы должны быть идемпотентными (обработка одного и того же события дважды не должна вызывать побочных эффектов).
+
+- Используется поле eventId из CloudEvents.
+- Notification Service перед отправкой email/SMS проверяет по eventId в своей БД (notification_db), не отправлял ли он уже это уведомление.
+
+## 2.4. Обработка ошибок в Kafka (Dead Letter Queue)
+Если Consumer не может обработать сообщение (например, упала внешняя SMTP-система), он не должен бесконечно ретраить, блокируя партицию.
+
+- Настроить стандартный Spring Kafka DefaultErrorHandler с DeadLetterPublishingRecoverer.
+- После N неудачных попыток сообщение перемещается в топик <original-topic>.DLT (Dead Letter Topic) для ручного разбора или отложенного ретрая.
+
+# 3.Распределенная трассировка (Observability)
+Трассировка запросов через 6 микросервисов — ключевой навык в распределенных системах.
+
+## 3.1. W3C Trace Context
+Используются стандартные заголовки OpenTelemetry:
+
+- traceparent — содержит trace-id и span-id.
+- tracestate — дополнительные vendor-specific данные.
+
+- Примечание: Spring Cloud Gateway и Spring Boot с подключенным micrometer-tracing-bridge-otel автоматически пробрасывают эти заголовки в синхронных вызовах. Ручная работа с ними в коде не требуется.
+
+## 3.2. Трассировка в асинхронных вызовах (Kafka)
+При публикации в Kafka (из Outbox) и потреблении, trace_id обязательно извлекается из SecurityContext (при публикации) и помещается в поле traceId в JSON событии (см. раздел 2.1).
+Consumer-сервис должен восстановить контекст трассировки при обработке события, чтобы логи корректно связывались в Grafana Loki/Tempo.
+
+## 3.3. Логирование (MDC)
+Каждый сервис автоматически должен добавлять trace_id и span_id в MDC (Mapped Diagnostic Context) логгера (настраивается через logback-spring.xml и зависимости micrometer).
+Пример формата лога: [%d{ISO8601}] [%thread] [traceId=%X{traceId}, spanId=%X{spanId}] [%level] %logger{36} - %msg%n 
+
+# 4. Стандарты HTTP заголовков для API
+## 4.1. Заголовки запросов (от клиента)
+
+| Заголовок     | Обязательный | Описание                                                          |
+|---------------|--------------|-------------------------------------------------------------------|
+| Authorization |	Да* | 	JWT токен в формате Bearer {token} (*кроме публичных эндпоинтов) |
+| Content-Type  |	Да | 	application/json                                                 |
+| Accept        |	Да | 	application/json                                                 |
+
+---
+
+# 4.2. Рекомендуемые контекстные заголовки
+
+| Заголовок  | Описание | Пример |
+|------------|----------|--------|
+| X-Language |	Язык интерфейса (для локализации ошибок) |	ru-RU, en-US |
+| X-Timezone |	Часовой пояс клиента	Europe/Moscow |
+
+
+
+
+## 4.3. Заголовки ответов
+| Заголовок | Описание |
+|-----------|----------|
+|Content-Type |	application/json |
+|X-RateLimit-Limit |	Лимит запросов (добавляется API Gateway) |
+|X-RateLimit-Remaining |	Оставшееся количество запросов |
+|X-RateLimit-Reset |	Время сброса лимита (Unix timestamp) |
+
+# 5. Обработка ошибок
+
+##  5.1. Стандартный формат REST ошибки
+Все downstream-сервисы должны возвращать ошибки в едином формате (реализуется через @RestControllerAdvice).
+
+```json
+{
+  "errorCode": "PRODUCT_NOT_FOUND",
+  "message": "Товар с артикулом ABC123 не найден",
+  "timestamp": "2026-07-13T10:00:00Z",
+  "path": "/api/v1/catalog/products/ABC123",
+  "details": null 
+}
 ```
-X-Error-Code: VALIDATION_ERROR
-X-Error-Message: Invalid email format
-X-Trace-ID: abc123-def456-ghi789
-```
 
----
+(Поле details заполняется списком ошибок валидации FieldViolation при коде 400 BAD_REQUEST).
 
-## Безопасность
+## 5.2. Стратегия ошибок при синхронных вызовах (OpenFeign + Resilience4j)
 
-### Запрещённые заголовки
+Если Order Service вызывает Catalog Service, а тот возвращает 500 или таймаут:
 
-Следующие заголовки **запрещено** передавать между сервисами:
+- Срабатывает Circuit Breaker (открывает цепь после N ошибок).
+- Вызывается Fallback метод в Order Service.
+- Fallback должен вернуть бизнес-ожидаемый результат (например, выбросить кастомное ServiceUnavailableException с сообщением "Сервис каталога временно недоступен, попробуйте позже"), которое превратится в HTTP 503 для клиента.
 
-| Заголовок | Причина |
-|-----------|---------|
-| `Authorization` | Токен уже валидирован API Gateway |
-| `Password`, `Secret`, `Key` | Чувствительные данные не должны передаваться |
-| `Cookie` | Сессии не используются в микросервисной архитектуре |
-
-### Проверка заголовков
-
-Каждый сервис должен:
-
-1. **Валидировать обязательные заголовки** — отклонять запросы без обязательных заголовков (`traceparent`, `X-User-Id`, `X-User-Email`, `X-User-Name`, `X-User-Roles`)
-2. **Логировать отсутствующие заголовки** — записывать предупреждения в лог с использованием MDC и trace ID
-3. **Проверять формат заголовков** — валидировать UUID для `X-User-Id`, email для `X-User-Email`, W3C Trace Context для `traceparent`
-
----
-
-## Обновление стандартов
-
-Стандарты межсервисной коммуникации могут обновляться по следующим причинам:
-
-1. **Добавление новых claim'ов** — при необходимости передачи дополнительной информации
-2. **Устаревание заголовков** — при переходе на новые стандарты
-3. **Изменение требований безопасности** — при обновлении OWASP Top 10 или других стандартов
-
-Обновления стандартов должны быть задокументированы и согласованы с командой архитекторов.
-
----
-
-## Ссылки
-
-- `docs/architecture/system-overview.md` - раздел 5 "Основные функциональные модули" (API Gateway)
-- `docs/architecture/system-overview.md` - раздел 8.2 "Межсервисная аутентификация" (Direct Keycloak Integration)
-- `docs/tasks/003-1-api-gateway-authentication-filter.md` - задача по настройке JWT валидации
-
----
-
-**Ответственные:**
-- **Архитектор:** Проектирование и согласование стандартов
-- **Team Lead:** Внедрение стандартов в команде
-- **DevOps:** Мониторинг соответствия стандартам
