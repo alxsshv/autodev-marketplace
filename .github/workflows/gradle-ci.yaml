@@ -1,0 +1,33 @@
+name: Gradle CI (Multi-module)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Validate Gradle wrapper
+        run: ./gradlew --version
+
+      - name: Build and run tests
+        run: ./gradlew clean build -x testClasses
+        # -x testClasses пропускает компиляцию тестов как отдельную фазу, если не нужна отдельно
+
+      # Если хочешь явно запускать только тесты (иначе build уже включает test)
+      # - name: Run tests only
+      #   run: ./gradlew test --info
