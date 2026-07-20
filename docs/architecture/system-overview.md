@@ -186,9 +186,8 @@ graph TD
 - Соответствует учебным целям проекта по изучению распределённых систем
 
 ### Коммуникация между сервисами
-- **Синхронная коммуникация:** REST API для прямых запросов с ожиданием ответа
-- **Асинхронная коммуникация:** Apache Kafka для событийной архитектуры и обеспечения отказоустойчивости
-- **gRPC:** для высокопроизводительных вызовов между сервисами при необходимости
+- **Синхронная коммуникация:** REST API (через Spring Cloud Gateway и OpenFeign для межсервисных вызовов) для прямых запросов с ожиданием ответа
+- **Асинхронная коммуникация:** Apache Kafka для событийно-ориентированной архитектуры (Event-Driven) и обеспечения отказоустойчивости
 
 ### Паттерны проектирования
 - **API Gateway:** единая точка входа для всех клиентов с маршрутизацией, аутентификацией и rate limiting
@@ -196,7 +195,7 @@ graph TD
 - **Circuit Breaker:** Resilience4j для предотвращения каскадных сбоев
 - **Saga Pattern:** для управления распределёнными транзакциями (оформление заказа)
 - **CQRS:** разделение команд и запросов для оптимизации производительности
-- **Event Sourcing:** сохранение событий для восстановления состояния системы
+- **Event-Driven Architecture:** асинхронное взаимодействие через публикацию и потребление событий (Pub/Sub) из Kafka
 
 ### Инфраструктура высокой доступности
 - **PostgreSQL Primary-Replica:** синхронная репликация между зонами отказа
@@ -300,6 +299,7 @@ graph TD
 - **Spring Security**: 6.4.5 - аутентификация и авторизация
 - **Spring Cloud Gateway**: 4.4.5 - API Gateway для маршрутизации запросов
 - **Spring Cloud Consul**: 5.0.0 - Service Discovery и конфигурация
+- **Spring Security OAuth2 Resource Server**: 6.4.5 - прямая валидация JWT токенов в каждом downstream-сервисе через JWK endpoint Keycloak (без промежуточных заголовков).
 - **Resilience4j**: 2.1.0 - реализация паттернов Circuit Breaker, Rate Limiter
 - **Liquibase**: 4.27.0 - версионирование и миграция схемы базы данных
 - **MapStruct**: 1.5.2 - маппинг объектов
@@ -356,56 +356,38 @@ graph TD
 
 ---
 
-## 8. Безопасность
+## 9. Безопасность
 
-### 8.1 Общая стратегия
+### 9.1 Общая стратегия
 
 Документ описывает стратегию обеспечения безопасности AutoDev Marketplace, включая аутентификацию, авторизацию, шифрование данных и аудит.
 
-### 8.2 Межсервисная аутентификация
+### 9.2 Межсервисная аутентификация
 
 #### Валидация JWT в API Gateway и Downstream-сервисах
 
-**Критическая архитектурная парадигма:**
-- **API Gateway**: Проверка подлинности (authentication) — *кто ты?* (валидация JWT через Keycloak)
-- **Downstream-сервисы**: Проверка прав (authorization) — *что тебе можно?* (валидация ролей из JWT)
+Критическая архитектурная парадигма (Direct JWT Propagation):
 
-**Правило №1: Downstream-сервисы НЕ доверяют заголовкам от API Gateway**
+- API Gateway выступает единым прокси-сервером и маршрутизатором. Он не извлекает claims из JWT и не генерирует кастомные заголовки (никаких X-User-Id, X-User-Roles).
+- API Gateway пробрасывает стандартный заголовок Authorization: Bearer <token> в downstream-сервисы без изменений.
+- Каждый downstream-сервис выступает как OAuth2 Resource Server и самостоятельно валидирует подпись и срок действия JWT токена напрямую через Keycloak (получая публичные ключи через JWK endpoint).
+- После валидации Spring Security в downstream-сервисе формирует Authentication объект, из которого сервис извлекает sub (User ID), email, preferred_username и роли (realm_access.roles) для принятия решений об авторизации (RBAC).
 
-- Заголовки `X-User-Id`, `X-User-Email`, `X-User-Name`, `X-User-Roles` могут быть подделаны или устареть
-- Каждый downstream-сервис должен валидировать JWT токен напрямую через Keycloak (Direct Integration)
-- Только после успешной валидации JWT можно использовать claims для принятия решений о доступе
-
-**Правило №2: RBAC проверяется на каждом уровне**
+**Схема работы**
 
 ```
-Client → API Gateway → [Downstream Service]
-        [Check JWT]       [Validate JWT + Check Roles]
+Client → [Authorization: Bearer <JWT>] → API Gateway → [Authorization: Bearer <JWT>] → Downstream Service
+                                         (Маршрутизация)                              (Spring Security OAuth2 Resource Server:
+                                                                                      валидация JWT + извлечение ролей)
 ```
 
-- Gateway проверяет, что JWT валиден и не истёк
-- Downstream сервис проверяет, что пользователь имеет необходимые роли для выполнения операции
-- Роли из заголовков **не считаются надёжными** и используются только для логирования
 
-**Правило №3: Никогда не полагайтесь на X-User-Roles для авторизации**
+#### Преимущества подхода:
 
-```java
-// ✅ ПРАВИЛЬНО: Проверка ролей по валидированному JWT
-@PreAuthorize("hasRole('BUYER')")
-@GetMapping
-public List<Product> getProducts() {
-    return productService.getAll();
-}
-
-// ❌ НЕПРАВИЛЬНО: Проверка по заголовку
-@GetMapping
-public List<Product> getProducts(@RequestHeader("X-User-Roles") String roles) {
-    if (roles.contains("BUYER")) {
-        return productService.getAll();
-    }
-    throw new AccessDeniedException();
-}
-```
+Отсутствие дублирующей логики по маппингу заголовков.
+Строгое соответствие стандартам Spring Security.
+Сервисы не доверяют Gateway в вопросах безопасности, они доверяют только криптографической подписи Keycloak.
+Снижение нагрузки на API Gateway (отсутствие кастомных фильтров парсинга токенов).
 
 #### Для MVP (без TLS)
 - **Service Account Tokens через Keycloak**
@@ -427,7 +409,7 @@ public List<Product> getProducts(@RequestHeader("X-User-Roles") String roles) {
 - Возможность отозвать токен в любой момент
 - Поддержка в Spring Security
 
-### 8.3 Стратегия шифрования
+### 9.3 Стратегия шифрования
 
 #### Для MVP
 - **TLS 1.3 для внешних API** (client ↔ service)
@@ -447,7 +429,7 @@ public List<Product> getProducts(@RequestHeader("X-User-Roles") String roles) {
 - BCrypt для пользовательских паролей
 - PBKDF2 для service account паролей
 
-### 8.4 RBAC (Role-Based Access Control)
+### 9.4 RBAC (Role-Based Access Control)
 
 #### Уровни доступа
 | Роль | Описание | Примеры сервисов |
@@ -488,7 +470,7 @@ public List<Product> getProducts(@RequestHeader("X-User-Roles") String roles) {
 - MODERATOR: view all messages for moderation
 - ADMIN: full access
 
-### 8.5 План аудита безопасности
+### 9.5 План аудита безопасности
 
 #### Еженедельные проверки
 - Логи аутентификации (неудачные попытки входа)
@@ -519,7 +501,7 @@ public List<Product> getProducts(@RequestHeader("X-User-Roles") String roles) {
 - **Static Analysis:** SonarQube для анализа кода
 - **Dynamic Analysis:** OWASP ZAP для penetration testing
 
-### 8.6 OWASP Top 10 compliance
+### 9.6 OWASP Top 10 compliance
 
 #### Меры по защите
 1. **A01:2021 – Broken Access Control**
@@ -572,7 +554,7 @@ public List<Product> getProducts(@RequestHeader("X-User-Roles") String roles) {
     - Restricted domains
     - Internal network isolation
 
-### 8.7 Security incident response
+### 9.7 Security incident response
 
 #### Процедура реагирования
 1. **Обнаружение:** Алерт через Prometheus/Grafana
