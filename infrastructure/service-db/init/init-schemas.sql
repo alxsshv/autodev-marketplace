@@ -4,7 +4,7 @@
 -- Создание схем для всех микросервисов
 
 CREATE SCHEMA IF NOT EXISTS catalog;
-CREATE SCHEMA IF NOT EXISTS order;
+CREATE SCHEMA IF NOT EXISTS orders;
 CREATE SCHEMA IF NOT EXISTS payment;
 CREATE SCHEMA IF NOT EXISTS platform;
 CREATE SCHEMA IF NOT EXISTS communication;

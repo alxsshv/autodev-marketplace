@@ -1,4 +1,31 @@
 databaseChangeLog:
-  - includeAll:
-      path: v1.0.0/
+  - include:
+      file: v1.0.0/07-06-2026-create-table-user-profiles.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/07-06-2026-create-index-platform-service.user-profiles-user-id.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/07-06-2026-create-index-platform-service.user-profiles-verification.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/07-06-2026-create-index-platform-service.user-profiles-store.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/07-06-2026-add-avatar-to-profile.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/20-07-2026-create-table-reviews.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/20-07-2026-create-index-platform.reviews-user-id.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/20-07-2026-create-index-platform.reviews-product-id.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/20-07-2026-create-table-outbox.sql
+      relativeToChangelogFile: true
+  - include:
+      file: v1.0.0/20-07-2026-create-index-platform.outbox-events-status-created-at.sql
       relativeToChangelogFile: true
