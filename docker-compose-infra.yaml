@@ -1,0 +1,80 @@
+services:
+
+  #SERVICE DISCOVERY
+  consul:
+    image: "consul:1.15.3"
+    container_name: "consul"
+    ports:
+      - 8500:8500
+    environment:
+      CONSUL_BIND_INTERFACE: eth0
+      CONSUL_LOCAL_CONFIG: |
+        {
+          "skip_leave_on_interrupt": true,
+          "disable_update_check": true,
+          "encrypt": "${CONSUL_ENCRYPT_KEY}",
+          "verify_incoming": false,
+          "verify_outgoing": false
+        }
+    command: >
+      agent -server -bootstrap -ui
+      -client=0.0.0.0
+      -log-level=INFO
+      -bind=0.0.0.0
+    networks:
+      - app_network
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "curl -f http://localhost:8500/v1/status/leader | grep -q '\"Status\":\"leader\"' || exit 1"
+      ]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # SERVICES DATABASE
+  services-database:
+    image: "postgres:15"
+    container_name: "services-database"
+    environment:
+      POSTGRES_USER: ${SERVICES_DB_USER}
+      POSTGRES_PASSWORD: ${SERVICES_DB_PASS}
+      POSTGRES_DB: ${SERVICES_DB}
+    ports:
+      - "5438:5432"
+    volumes:
+      - ./infrastructure/service-db/init/init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -p 5432" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - app_network
+
+  # CACHE
+  redis:
+    image: "redis:7"
+    container_name: "redis"
+    command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD}" ]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "$REDIS_PASSWORD", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+
+networks:
+  app_network:
+    driver: bridge
+
