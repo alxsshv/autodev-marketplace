@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.UUID;
+import java.math.BigDecimal;
 
 @Getter
 @Setter
@@ -16,14 +16,13 @@ import java.util.UUID;
 @Table(name = "user_profiles", schema = "platform")
 public class UserProfileEntity extends AbstractBaseEntity {
 
-    /**Идентификатор пользователяв keycloak*/
+    /**Идентификатор пользователя в keycloak*/
     @Column(name = "keycloak_user_id",
             nullable = false, unique = true)
-    private UUID keycloakUserId;
+    private String keycloakUserId;
 
     /** Название магазина или разборки */
-    @Column(name = "store_name",
-            length = 255)
+    @Column(name = "store_name")
     private String storeName;
 
     /** Описание магазина (часы работы, условия доставки и т.д.)*/
@@ -32,12 +31,11 @@ public class UserProfileEntity extends AbstractBaseEntity {
     private String storeDescription;
 
     /** Ссылка на логотип магазина. Хранит не сам файл, а URL пути в объектном хранилище MinIO */
-    @Column(name = "store_logo_url",
-            length = 255)
+    @Column(name = "store_logo_url")
     private String storeLogoUrl;
 
     /** Ссылка на аватар пользователя */
-    @Column(name = "avatar_url", length = 255)
+    @Column(name = "avatar_url")
     private String avatarUrl;
 
     /** Статус верификации продавца */
@@ -48,7 +46,7 @@ public class UserProfileEntity extends AbstractBaseEntity {
 
     /** Баланс баллов лояльности продавца (или покупателя). */
     @Column(name = "loyalty_balance")
-    private Long loyaltyBalance;
+    private BigDecimal loyaltyBalance;
 
 
 }

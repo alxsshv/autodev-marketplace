@@ -10,6 +10,6 @@ import java.util.UUID;
 @Repository
 public interface UserProfileRepository extends JpaRepository<UserProfileEntity, UUID> {
 
-    Optional<UserProfileEntity> findByKeycloakUserId(UUID keycloakUserId);
+    Optional<UserProfileEntity> findByKeycloakUserId(String keycloakUserId);
 
 }

@@ -2,7 +2,7 @@
 -- changeset Aleksey Shvariov:07-06-2026-create-table-user-profiles
 
 CREATE TABLE platform.user_profiles (
-    id                  BIGSERIAL       PRIMARY KEY,
+    id                  UUID       PRIMARY KEY,
     keycloak_user_id    VARCHAR(255)    NOT NULL    UNIQUE,
     store_name          VARCHAR(255)    NULL,
     store_description   TEXT            NULL,
