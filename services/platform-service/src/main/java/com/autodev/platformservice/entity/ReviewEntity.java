@@ -9,8 +9,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.UUID;
-
 @Getter
 @Setter
 @AllArgsConstructor
@@ -21,11 +19,11 @@ public class ReviewEntity extends AbstractBaseEntity {
 
     @Column(name = "product_id",
             nullable = false)
-    private UUID productId;
+    private String productId;
 
     @Column(name = "user_id",
             nullable = false)
-    private UUID userId;
+    private String userId;
 
     @Column(name = "rating",
             nullable = false,

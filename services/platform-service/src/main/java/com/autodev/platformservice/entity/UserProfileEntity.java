@@ -1,10 +1,7 @@
 package com.autodev.platformservice.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.math.BigDecimal;
 
@@ -12,14 +9,20 @@ import java.math.BigDecimal;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 @Entity
 @Table(name = "user_profiles", schema = "platform")
 public class UserProfileEntity extends AbstractBaseEntity {
 
-    /**Идентификатор пользователя в keycloak*/
+    /**Идентификатор пользователя в keycloak */
     @Column(name = "keycloak_user_id",
             nullable = false, unique = true)
     private String keycloakUserId;
+
+    /** Адрес электронной почты пользователя */
+    @Column(name = "email",
+            unique = true, nullable = false)
+    private String email;
 
     /** Название магазина или разборки */
     @Column(name = "store_name")
@@ -47,6 +50,8 @@ public class UserProfileEntity extends AbstractBaseEntity {
     /** Баланс баллов лояльности продавца (или покупателя). */
     @Column(name = "loyalty_balance")
     private BigDecimal loyaltyBalance;
+
+
 
 
 }
