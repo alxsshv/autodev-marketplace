@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AmplicodeDatabaseMigrationSettings" liquibaseFileType="SQL" />
   <component name="AmplicodePersistenceUnitSettings">
     <persistence-units>
       <persistence-unit moduleName="autodev-marketplace.services.platform-service.main" name="Default">

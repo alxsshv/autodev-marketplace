@@ -18,77 +18,135 @@ import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Сервис для выполнения бизнес-логики регистрации новых пользователей на платформе.
+ * <p>
+ * Координирует процесс регистрации, который включает три основных шага:
+ * <ol>
+ *   <li>Создание учётной записи в Keycloak через {@link KeycloakAdminClient}.</li>
+ *   <li>Создание локального профиля пользователя в БД через {@link UserProfileService}.</li>
+ *   <li>Публикация доменного события {@code USER_REGISTERED} в outbox через {@link OutboxService}.</li>
+ * </ol>
+ * <p>
+ * <b>Saga Outbox:</b> шаги 2 и 3 выполняются в рамках единой database-транзакции,
+ * гарантирующей атомарность создания профиля и записи outbox-события.
+ * <p>
+ * <b>Compensating Transaction:</b> если шаги 2 или 3 завершаются неудачно,
+ * выполняется компенсирующая транзакция — удаление созданного пользователя
+ * из Keycloak через {@link #compensateKeycloakUserCreation(UUID)}, чтобы
+ * избежать создания «полупрофилей» в системе.
+ * <p>
+ * <b>Пример потока регистрации:</b>
+ * <pre>{@code
+ * // Успешный путь:
+ * registerUser(dto) -> Keycloak: CREATE -> DB: CREATE PROFILE -> Outbox: SAVE EVENT -> SUCCESS
+ *
+ * // Путь с ошибкой (Компенсационная транзакция):
+ * registerUser(dto) -> Keycloak: CREATE -> DB: FAIL -> Keycloak: DELETE (compensate) -> THROW
+ * }</pre>
+ *
+ * @see KeycloakAdminClient
+ * @see UserProfileService
+ * @see OutboxService
+ * @see RegistrationOperationException
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class RegistrationService {
 
+    /**
+     * Клиент административного API Keycloak для создания и удаления пользователей.
+     * Инъектируется через Spring.
+     */
     private final KeycloakAdminClient keycloakAdminClient;
-    private final UserProfileRepository userProfileRepository;
-    private final OutboxRepository outboxRepository;
-    private final TransactionTemplate transactionTemplate;
-    private final ObjectMapper objectMapper;
 
+    /**
+     * Шаблон транзакций Spring для выполнения шагов в рамках единой database-транзакции.
+     * <p>
+     * Обеспечивает атомарность создания профиля пользователя и записи outbox-события.
+     */
+    private final TransactionTemplate transactionTemplate;
+
+    /**
+     * Сервис для выполнения операций с профилем пользователя.
+     * Инъектируется через Spring.
+     */
+    private final UserProfileService userProfileService;
+
+    /**
+     * Сервис для записи доменных событий в outbox.
+     * Инъектируется через Spring.
+     */
+    private final OutboxService outboxService;
+
+    /**
+     * Выполняет полную процедуру регистрации нового пользователя.
+     * <p>
+     * <b>Алгоритм:</b>
+     * <ol>
+     *   <li>Создаёт пользователя в Keycloak через {@link KeycloakAdminClient#createKeycloakUser(RegisterRequestDto)}.</li>
+     *   <li>В рамках транзакции:
+     *       <ul>
+     *         <li>Создаёт локальный профиль через {@link UserProfileService#createProfileIfNotExists(String, String)}.</li>
+     *         <li>Сохраняет событие {@code USER_REGISTERED} в outbox через {@link OutboxService#publishEvent(DomainEvent, UUID, Object)}.</li>
+     *       </ul>
+     *   </li>
+     *   <li>В случае ошибки — вызывает компенсирующую транзакцию {@link #compensateKeycloakUserCreation(UUID)}
+     *       и выбрасывает {@link RegistrationOperationException}.</li>
+     * </ol>
+     * <p>
+     * <b>Обработка ошибок:</b>
+     * <ul>
+     *   <li>Если создание профиля или публикация outbox-события завершаются неудачей,
+     *       пользователь удаляется из Keycloak (compensating transaction).</li>
+     *   <li>Если компенсация тоже не удалась — ошибка логируется, требуется ручное вмешательство.</li>
+     * </ul>
+     *
+     * @param dto данные для регистрации пользователя
+     * @throws RegistrationOperationException если регистрация не удалась (профиль не создан, outbox недоступен, компенсация не удалась)
+     */
     public void registerUser(RegisterRequestDto dto) {
-        log.info("Starting registration for email: {}", dto.email());
+        String email = dto.email();
+        log.info("Starting registration for email: {}", email);
 
         UUID keycloakUserId = keycloakAdminClient.createKeycloakUser(dto);
 
         try {
-            log.info("User created in Keycloak for email {} with keycloakUserId = {}", dto.email(), keycloakUserId);
+            log.info("User created in Keycloak for email {} with keycloakUserId = {}", email, keycloakUserId);
 
             transactionTemplate.executeWithoutResult(status -> {
-                saveUserProfile(keycloakUserId, dto);
-                saveOutboxEvent(keycloakUserId, dto);
+                userProfileService.createProfileIfNotExists(keycloakUserId.toString(), email);
+                outboxService.publishEvent(UserEvents.USER_REGISTERED, keycloakUserId, dto);
             });
         } catch (Exception ex) {
-            log.error("Registration failed for email {}, initiating compensating transaction", dto.email(), ex);
+            log.error("Registration failed for email {}, initiating compensating transaction", email, ex);
             compensateKeycloakUserCreation(keycloakUserId);
-            throw new RegistrationOperationException("Ошибка при создании профиля для пользователя %s: %s", dto.email(), ex.getMessage());
-        }
-}
-
-    private void saveUserProfile(UUID keycloakUserId, RegisterRequestDto dto) {
-        UserProfileEntity userProfile = UserProfileEntity.builder()
-                        .keycloakUserId(keycloakUserId.toString())
-                        .email(dto.email())
-                        .verificationStatus(VerificationStatus.NOT_VERIFIED)
-                        .loyaltyBalance(new BigDecimal(0))
-                        .build();
-
-        userProfileRepository.save(userProfile);
-
-    }
-
-    private void saveOutboxEvent(UUID keycloakUserId, RegisterRequestDto dto) {
-        try {
-            String payloadJson = objectMapper.writeValueAsString(
-                    Map.of("keycloakUserId", keycloakUserId.toString(), "email", dto.email())
-            );
-
-            OutboxEntity event = OutboxEntity.builder()
-                    .aggregateType(UserEvents.AGGREGATE_TYPE)
-                    .aggregateId(keycloakUserId)
-                    .eventType(UserEvents.EventType.USER_REGISTERED)
-                    .topic(UserEvents.TOPIC)
-                    .payload(payloadJson)
-                    .status(OutboxStatus.PENDING)
-                    .build();
-
-            outboxRepository.save(event);
-        } catch (JsonProcessingException ex) {
-            log.info("Failed serialize outbox payload when registration user with email {}: {} ", dto.email(), ex.getMessage());
-            throw new RegistrationOperationException("Ошибка регистрации пользователя %s, пожалуйста повторите регистрацию позже", dto.email());
+            throw new RegistrationOperationException("Ошибка при создании профиля для пользователя", ex);
         }
     }
 
-
+    /**
+     * Выполняет компенсирующую транзакцию — удаляет пользователя из Keycloak.
+     * <p>
+     * Вызывается при неудаче на шагах 2 или 3 процесса регистрации.
+     * Гарантирует, что пользователь не останется «застрявшим» в Keycloak
+     * без соответствующего профиля в локальной БД.
+     * <p>
+     * <b>Обработка ошибок компенсации:</b>
+     * <ul>
+     *   <li>Если удаление успешно — логируется информация.</li>
+     *   <li>Если удаление не удалось — логируется критическая ошибка с UUID пользователя
+     *       и сообщением о необходимости ручного вмешательства.</li>
+     * </ul>
+     *
+     * @param keycloakUserId UUID пользователя Keycloak для удаления
+     */
     private void compensateKeycloakUserCreation(UUID keycloakUserId) {
         try {
             keycloakAdminClient.deleteKeycloakUser(keycloakUserId.toString());
             log.info("Compensating transaction: successfully deleted Keycloak user {}", keycloakUserId);
         } catch (KeycloakInfrastructureException ex) {
-            //TODO: Нужно добавить метрику, контролирующую сколько ошибок такого рода у нас возникает.
             log.error("COMPENSATION FAILED: Could not delete Keycloak user {} error: {}. Manual intervention required!", keycloakUserId, ex.getMessage());
         }
     }

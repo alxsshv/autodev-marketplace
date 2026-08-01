@@ -35,12 +35,12 @@ public class SecurityConfig {
                 .authorizeExchange(exchanges -> exchanges
 
                         .pathMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
-
                         .pathMatchers(
                                 "/actuator/**",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/swagger-resources/**"
+                                "/swagger-resources/**",
+                                "/api/v1/platform/registration"
                         ).permitAll()
 
                         .anyExchange().authenticated()
