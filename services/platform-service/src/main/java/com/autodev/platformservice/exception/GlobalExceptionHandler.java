@@ -5,8 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.messaging.handler.annotation.support.MethodArgumentNotValidException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -145,12 +145,9 @@ public class GlobalExceptionHandler {
      */
     @SuppressWarnings("java:S2259")
     private List<FieldViolation> extractViolation(MethodArgumentNotValidException ex) {
-        if (ex.getBindingResult() != null) {
             return Objects.requireNonNull(ex.getBindingResult()).getFieldErrors().stream()
                     .map(fieldError -> new FieldViolation(fieldError.getField(), fieldError.getDefaultMessage()))
                     .toList();
-        }
-        return List.of();
     }
 
     /**
@@ -220,7 +217,7 @@ public class GlobalExceptionHandler {
      * @return ответ с сообщением об ошибке интеграции
      */
     @ExceptionHandler(KeycloakInfrastructureException.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     public ErrorResponse handleKeycloakInfrastructureException(KeycloakInfrastructureException ex, HttpServletRequest request) {
 
         log.error("Ошибка при взаимодействии с сервисом авторизации при выполнении запроса по пути {} : {}",
@@ -228,7 +225,7 @@ public class GlobalExceptionHandler {
 
         return new ErrorResponse(
                 OffsetDateTime.now(clock),
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
                 ex.getMessage(),
                 request.getRequestURI(),
                 null
@@ -248,7 +245,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(RegistrationOperationException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse handleKeycloakInfrastructureException(RegistrationOperationException ex, HttpServletRequest request) {
+    public ErrorResponse handleRegistrationOperationException(RegistrationOperationException ex, HttpServletRequest request) {
 
         log.error("Ошибка при выполнении процедуры регистрации пользователя по пути {} : {}",
                 request.getRequestURI(), ex.getMessage());
@@ -274,7 +271,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(UserAlreadyExistsException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse handleUserAlreadyExistsException(KeycloakInfrastructureException ex, HttpServletRequest request) {
+    public ErrorResponse handleUserAlreadyExistsException(UserAlreadyExistsException ex, HttpServletRequest request) {
 
         log.error("Ошибка создания пользователя по пути {} : {}",
                 request.getRequestURI(), ex.getMessage());

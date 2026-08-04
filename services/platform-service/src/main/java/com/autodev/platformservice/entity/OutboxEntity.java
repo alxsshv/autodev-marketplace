@@ -3,7 +3,9 @@ package com.autodev.platformservice.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UuidGenerator;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -57,6 +59,7 @@ public class OutboxEntity {
     @Column(name = "payload",
             columnDefinition = "jsonb",
             nullable = false)
+    @JdbcTypeCode(SqlTypes.JSON)
     private String payload;
 
     /** Временная метка создания события (автоматически устанавливается Hibernate) */

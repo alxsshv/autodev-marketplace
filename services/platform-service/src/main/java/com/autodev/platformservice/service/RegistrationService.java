@@ -2,20 +2,16 @@ package com.autodev.platformservice.service;
 
 import com.autodev.platformservice.client.keycloak.KeycloakAdminClient;
 import com.autodev.platformservice.dto.RegisterRequestDto;
-import com.autodev.platformservice.entity.*;
+import com.autodev.platformservice.dto.event.UserRegisteredEventPayload;
+import com.autodev.platformservice.entity.DomainEvent;
+import com.autodev.platformservice.entity.UserEvents;
 import com.autodev.platformservice.exception.KeycloakInfrastructureException;
 import com.autodev.platformservice.exception.RegistrationOperationException;
-import com.autodev.platformservice.repository.OutboxRepository;
-import com.autodev.platformservice.repository.UserProfileRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.math.BigDecimal;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -112,12 +108,19 @@ public class RegistrationService {
 
         UUID keycloakUserId = keycloakAdminClient.createKeycloakUser(dto);
 
+        UserRegisteredEventPayload eventPayload = new UserRegisteredEventPayload(
+                keycloakUserId.toString(),
+                email,
+                dto.firstName(),
+                dto.lastName()
+        );
+
         try {
             log.info("User created in Keycloak for email {} with keycloakUserId = {}", email, keycloakUserId);
 
             transactionTemplate.executeWithoutResult(status -> {
                 userProfileService.createProfileIfNotExists(keycloakUserId.toString(), email);
-                outboxService.publishEvent(UserEvents.USER_REGISTERED, keycloakUserId, dto);
+                outboxService.publishEvent(UserEvents.USER_REGISTERED, keycloakUserId, eventPayload);
             });
         } catch (Exception ex) {
             log.error("Registration failed for email {}, initiating compensating transaction", email, ex);

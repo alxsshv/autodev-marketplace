@@ -25,44 +25,20 @@ import jakarta.validation.constraints.Size;
  */
 public record UpdateProfileRequestDto(
 
-        /**
-         * Название магазина пользователя.
-         * <p>
-         * Опциональное поле. Максимальная длина — 255 символов.
-         *
-         * @see jakarta.validation.constraints.Size
-         */
         @Size(max = 255, message = "Превышена максимально допустимая длина названия магазина (255 символов)")
-        String StoreName,
+        String storeName,
 
-        /**
-         * Описание магазина пользователя.
-         * <p>
-         * Опциональное поле. Максимальная длина — 2000 символов.
-         *
-         * @see jakarta.validation.constraints.Size
-         */
         @Size(max = 2000, message = "Максимальная длина описания магазина не должна превышать 2000 символов")
         String storeDescription,
 
-        /**
-         * Номер телефона пользователя.
-         * <p>
-         * Опциональное поле. Допустимый формат:
-         * <ul>
-         *   <li>Начинается с {@code +} или цифры.</li>
-         *   <li>Содержит только цифры, дефисы и пробелы.</li>
-         *   <li>Длина: от 7 до 15 символов.</li>
-         * </ul>
-         * <p>
-         * Регулярное выражение: {@code ^\\+?[0-9\\-\\s]{7,15}$}.
-         *
-         * @see jakarta.validation.constraints.Pattern
-         * @see jakarta.validation.constraints.Size
-         */
         @Pattern(regexp = "^\\+?[0-9\\-\\s]{7,15}$", message = "Неверный формат номера телефона")
         @Size(max = 20, message = "Превышена максимально допустимая длина номера телефона (20 символов)")
-        String phone
+        String phone,
 
+        @Size(max = 255, message = "Превышена максимально допустимая длина URL для логотипа магазина (255 символов)")
+        String storeLogoUrl,
+
+        @Size(max = 255, message = "Превышена максимально допустимая длина URL для логотипа пользователя (255 символов)")
+        String avatarUrl
 ) {
 }

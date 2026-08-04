@@ -13,7 +13,7 @@ import java.io.IOException;
  * REST-интерцептор для автоматического добавления токена аутентификации Keycloak
  * в заголовки исходящих HTTP-запросов.
  * <p>
- * Используется как компонент拦截器 в {@link org.springframework.web.client.RestTemplate}
+ * Используется как компонент в {@link org.springframework.web.client.RestTemplate}
  * или {@link org.springframework.web.client.RestClient} для проксирования запросов
  * к административному API Keycloak. При каждом запросе интерцептор получает
  * сервисный Bearer-токен через {@link KeycloakTokenProvider} и добавляет его

@@ -5,6 +5,7 @@ import com.autodev.platformservice.dto.UserProfileResponseDto;
 import com.autodev.platformservice.entity.UserProfileEntity;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingConstants;
 import org.mapstruct.MappingTarget;
 
 /**
@@ -24,7 +25,7 @@ import org.mapstruct.MappingTarget;
  * @see UpdateProfileRequestDto
  * @see UserProfileEntity
  */
-@Mapper
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING)
 public interface UserProfileMapper {
 
     /**

@@ -1,6 +1,5 @@
 package com.autodev.platformservice.dto;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -18,10 +17,6 @@ import jakarta.validation.constraints.Size;
  * <p>
  * <b>Валидация:</b> все поля обязательны (аннотация {@code @NotBlank}),
  * email должен соответствовать формату {@code @Email}, пароль — от 6 до 64 символов.
- * <p>
- * <b>Безопасность:</b> поле {@code password} отмечено аннотацией
- * {@link com.fasterxml.jackson.annotation.JsonIgnore @JsonIgnore}, чтобы
- * исключить его из логов и JSON-ответов.
  * <p>
  * <b>Метод {@code toString()}</b> переопределён для безопасности — не включает пароль.
  *
@@ -57,7 +52,6 @@ public record RegisterRequestDto(
          */
         @NotBlank(message = "Пароль пользователя не может быть пустым")
         @Size(min = 8, max = 64, message = "Пароль пользователя должен быть не меньше 6 символов и не более 64 символов")
-        @JsonIgnore
         String password,
 
         /**

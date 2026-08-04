@@ -36,7 +36,7 @@ public interface ReviewRepository extends JpaRepository<ReviewEntity, UUID> {
      * @param productId идентификатор товара, для которого нужны отзывы
      * @return список отзывов для товара, отсортированный по убыванию даты создания
      */
-    List<ReviewEntity> findByProductIdOrderByCreatedAtDesc(String productId);
+    List<ReviewEntity> findByProductIdOrderByCreatedAtDesc(UUID productId);
 
     /**
      * Находит все отзывы, написанные указанным пользователем.
@@ -47,6 +47,6 @@ public interface ReviewRepository extends JpaRepository<ReviewEntity, UUID> {
      * @param userId идентификатор пользователя (ключевое поле Keycloak)
      * @return список отзывов пользователя
      */
-    List<ReviewEntity> findByUserId(String userId);
+    List<ReviewEntity> findByUserId(UUID userId);
 
 }

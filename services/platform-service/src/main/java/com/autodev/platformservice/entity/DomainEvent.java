@@ -15,7 +15,7 @@ package com.autodev.platformservice.entity;
  *   <li>Уникальное имя типа события ({@link #getEventType()}).</li>
  * </ul>
  *
- * @see OutboxService
+ * @see com.autodev.platformservice.service.OutboxService
  * @see OutboxEntity
  * @see UserEvents
  */

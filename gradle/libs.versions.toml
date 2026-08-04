@@ -14,7 +14,7 @@ reactorTest = "3.8.0"
 resilence4j = "2.2.0"
 redisTestconainer = "2.2.4"
 testcontainers = "2.0.5"
-wiremock = "3.9.2"
+wiremock = "3.10.0"
 wiremockSpring = "3.4.0"
 
 
@@ -74,7 +74,7 @@ testcontainers = {group = "org.testcontainers", name = "testcontainers", version
 testcontainers-junit = {group = "org.testcontainers", name = "testcontainers-junit-jupiter", version.ref = "testcontainers"}
 testcontainers-kafka = {group = "org.testcontainers", name = "testcontainers-kafka", version.ref = "testcontainers"}
 testcontainers-postgresql = {group = "org.testcontainers", name = "testcontainers-postgresql", version.ref = "testcontainers"}
-wiremock = { group = "org.wiremock", name = "wiremock", version.ref = "wiremock" }
+wiremock = { group = "org.wiremock", name = "wiremock-standalone", version.ref = "wiremock" }
 wiremock-spring = { group = "org.wiremock.integrations", name = "wiremock-spring-boot", version.ref = "wiremockSpring" }
 
 
