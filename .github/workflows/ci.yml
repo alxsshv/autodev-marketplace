@@ -138,7 +138,60 @@ jobs:
             services/${{ matrix.service }}/build/reports/
 
   # ============================================
-  # JOB 3: Integration tests (только на push в develop)
+  # JOB 3: SECURITY GATE — OWASP Dependency Check
+  # ============================================
+  security-scan:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      # OWASP кэширует базу CVE локально — кэшируем между запусками
+      - name: Cache OWASP database
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/dependency-check-data
+          key: ${{ runner.os }}-owasp-${{ github.run_id }}
+          restore-keys: ${{ runner.os }}-owasp-
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - run: chmod +x gradlew
+
+      # Запускаем сканирование зависимостей
+      - name: OWASP Dependency Check
+        run: ./gradlew :services:${{ matrix.service }}:dependencyCheckAnalyze --no-daemon
+
+      # Публикуем отчёт в Security tab (опционально, требует permissions)
+      - name: Upload OWASP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-dependency-check-report
+          path: services/${{ matrix.service }}/build/reports/dependency-check-report.html
+
+
+
+  # ============================================
+  # JOB 4: Integration tests (только на push в develop)
   # ============================================
   integration-tests:
     needs: [detect-changes, quality-and-unit-tests]
@@ -168,3 +221,38 @@ jobs:
         with:
           name: ${{ matrix.service }}-integration-reports
           path: services/${{ matrix.service }}/build/reports/tests/integrationTest/
+
+  # ============================================
+  # JOB 5: Агрегатор для Branch Protection
+  # Имеет фиксированное имя "CI Passed" — его и будем требовать в Rules
+  # ============================================
+  ci-passed:
+    name: CI Passed
+    needs: [ detect-changes, quality-and-unit-tests, security-scan ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify CI results
+        run: |
+          echo "Detect changes: ${{ needs.detect-changes.result }}"
+          echo "Quality tests: ${{ needs.quality-and-unit-tests.result }}"
+          echo "Security scan: ${{ needs.security-scan.result }}"
+
+          # Если нет изменений в сервисах — matrix job'ы пропущены (skipped), это нормально
+          if [ "${{ needs.detect-changes.outputs.services }}" == "[]" ]; then
+            echo "No service changes detected. CI passed."
+            exit 0
+          fi
+
+          # Иначе проверяем, что оба matrix job'а успешно завершились
+          if [ "${{ needs.quality-and-unit-tests.result }}" != "success" ]; then
+            echo "::error::Quality and unit tests failed"
+            exit 1
+          fi
+
+          if [ "${{ needs.security-scan.result }}" != "success" ]; then
+            echo "::error::Security scan failed"
+            exit 1
+          fi
+
+          echo "All required checks passed"

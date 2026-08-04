@@ -10,6 +10,8 @@ plugins {
     id("org.springframework.boot")
     id("io.spring.dependency-management")
     id("com.github.spotbugs") version "6.0.14" apply false
+    id("org.owasp.dependencycheck") version "10.0.4" apply false
+
 }
 
 subprojects {
@@ -19,6 +21,7 @@ subprojects {
     apply(plugin = "jacoco")
     apply(plugin = "checkstyle")
     apply(plugin = "com.github.spotbugs")
+    apply(plugin = "org.owasp.dependencycheck")
 
     group = "com.autodev"
 
@@ -84,6 +87,29 @@ subprojects {
     tasks.named("check") {
         dependsOn(tasks.withType<JacocoCoverageVerification>())
     }
+
+    configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
+        // Анализаторы, нерелевантные для Java
+        analyzers {
+            assemblyEnabled = false
+            nugetconfEnabled = false
+            nuspecEnabled = false
+            nodeEnabled = false
+        }
+
+        // ПАДАЕМ при HIGH и CRITICAL (CVSS >= 7.0)
+        // 0 = ignore, 11 = fail on everything
+        failBuildOnCVSS = 7.0f
+
+        // Где хранить suppressions (ложные срабатывания)
+        suppressionFiles = listOf(
+            rootProject.file("config/dependency-check/suppressions.xml").toString()
+        )
+
+        // Форматы отчётов
+        formats = listOf("HTML", "JSON", "XML")
+    }
+
 }
 
 
