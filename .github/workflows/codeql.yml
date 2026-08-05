@@ -1,0 +1,76 @@
+name: CodeQL Security Analysis
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+  schedule:
+    # Регулярное сканирование: каждый понедельник в 6:00 UTC
+    # Нужно, потому что GitHub обновляет наборы правил CodeQL
+    - cron: '0 6 * * 1'
+
+env:
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  analyze:
+    name: Analyze Java/Kotlin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write   # ← обязательно для загрузки результатов
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['java-kotlin']  # CodeQL объединяет Java и Kotlin
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # === Инициализация CodeQL ===
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: manual
+          # Раскомментируйте для более глубокого анализа (больше false positives):
+          # queries: security-extended
+
+      # === Сборка проекта (CodeQL должен скомпилировать код, чтобы построить AST) ===
+      - name: Build project for CodeQL
+        run: ./gradlew classes --no-daemon
+        # `classes` = compileJava + compileKotlin (если есть Kotlin-код)
+
+      # === Анализ ===
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

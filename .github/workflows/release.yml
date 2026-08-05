@@ -1,0 +1,351 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - 'release/**'
+
+env:
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  # ============================================
+  # JOB 1: Парсим имя ветки и определяем режим
+  # ============================================
+  parse-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      service: ${{ steps.parse.outputs.service }}
+      version: ${{ steps.parse.outputs.version }}
+      mode: ${{ steps.parse.outputs.mode }}
+      services_json: ${{ steps.parse.outputs.services_json }}
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # нужны все теги и история для diff
+
+      - name: Parse branch name
+        id: parse
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "Raw branch: $BRANCH"
+
+          # --- BATCH: release/batch или release/batch/v2024.08.05 ---
+          if [[ "$BRANCH" == release/batch* ]]; then
+            echo "mode=batch" >> $GITHUB_OUTPUT
+          
+            # Версия: из имени ветки или сегодняшняя дата
+            if [[ "$BRANCH" =~ ^release/batch/v(.+)$ ]]; then
+              echo "version=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            else
+              echo "version=$(date +%Y.%m.%d)" >> $GITHUB_OUTPUT
+            fi
+          
+            # Определяем, какие сервисы изменились с момента main
+            CHANGED=$(git diff --name-only origin/main...HEAD | grep '^services/' | cut -d'/' -f2 | sort -u)
+          
+            # Если изменился shared-lib или корневые файлы сборки — пересобираем ВСЕ сервисы
+            if echo "$CHANGED" | grep -q '^shared-lib$' || \
+               git diff --name-only origin/main...HEAD | grep -qE '^(build\.gradle\.kts|settings\.gradle\.kts|gradle/|gradlew)'; then
+              SERVICES=$(find services/ -maxdepth 1 -mindepth 1 -type d | sed 's|services/||' | grep -v '^shared-lib$' | jq -R . | jq -s -c .)
+              echo "Batch mode: rebuilding ALL services due to shared-lib or root build changes"
+            else
+              SERVICES=$(echo "$CHANGED" | grep -v '^shared-lib$' | jq -R . | jq -s -c .)
+              echo "Batch mode: rebuilding changed services only"
+            fi
+          
+            echo "services_json=$SERVICES" >> $GITHUB_OUTPUT
+            echo "service=batch" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # --- MANUAL: release/api-gateway/v2.1.0 ---
+          if [[ "$BRANCH" =~ ^release/([^/]+)/v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "mode=manual" >> $GITHUB_OUTPUT
+            echo "service=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            echo "version=${BASH_REMATCH[2]}" >> $GITHUB_OUTPUT
+            echo "services_json=[\"${BASH_REMATCH[1]}\"]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # --- AUTO: release/api-gateway ---
+          if [[ "$BRANCH" =~ ^release/([^/]+)$ ]]; then
+            echo "mode=auto" >> $GITHUB_OUTPUT
+            echo "service=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            echo "version=" >> $GITHUB_OUTPUT
+            echo "services_json=[\"${BASH_REMATCH[1]}\"]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "mode=unknown" >> $GITHUB_OUTPUT
+          echo "::error::Branch name '$BRANCH' does not match expected patterns: release/<service>, release/<service>/vX.Y.Z, or release/batch[/v...]"
+
+  # ============================================
+  # JOB 2: Авто-определение версии + changelog
+  # ============================================
+  release-info:
+    needs: parse-branch
+    if: needs.parse-branch.outputs.mode != 'unknown' && needs.parse-branch.outputs.mode != 'batch'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.info.outputs.version }}
+      bump: ${{ steps.info.outputs.bump }}
+      changelog: ${{ steps.info.outputs.changelog }}
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version and changelog
+        id: info
+        run: |
+          SERVICE="${{ needs.parse-branch.outputs.service }}"
+          MODE="${{ needs.parse-branch.outputs.mode }}"
+          
+          # Ищем последний тег этого сервиса (например api-gateway/v1.2.3)
+          LAST_TAG=$(git tag -l "${SERVICE}/v*" --sort=-v:refname | head -n 1)
+          echo "Last tag for ${SERVICE}: ${LAST_TAG}"
+          
+          if [ -z "$LAST_TAG" ]; then
+            CURRENT_VERSION="0.0.0"
+            COMMITS=$(git log --pretty=format:"%s")
+            echo "No previous tag found, starting from 0.0.0"
+          else
+            CURRENT_VERSION=${LAST_TAG#${SERVICE}/v}
+            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s")
+            echo "Previous version: ${CURRENT_VERSION}"
+          fi
+          
+          MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+          PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+          
+          # --- AUTO: анализируем Conventional Commits ---
+          if [ "$MODE" == "auto" ]; then
+            BUMP="none"
+          
+            # 1. Проверяем BREAKING CHANGE (major)
+            while IFS= read -r line; do
+              if echo "$line" | grep -qE '^[a-z]+(\([^)]+\))?!:'; then
+                BUMP="major"
+                echo "Detected breaking change by scope: $line"
+              fi
+              if echo "$line" | grep -qE '^BREAKING CHANGE'; then
+                BUMP="major"
+                echo "Detected BREAKING CHANGE footer: $line"
+              fi
+            done <<< "$COMMITS"
+          
+            # 2. Проверяем feat (minor)
+            if [ "$BUMP" = "none" ]; then
+              while IFS= read -r line; do
+                if echo "$line" | grep -qE '^feat(\([^)]+\))?:'; then
+                  BUMP="minor"
+                fi
+              done <<< "$COMMITS"
+            fi
+          
+            # 3. Проверяем fix/perf/refactor/revert (patch)
+            if [ "$BUMP" = "none" ]; then
+              while IFS= read -r line; do
+                if echo "$line" | grep -qE '^(fix|perf|refactor|revert)(\([^)]+\))?:'; then
+                  BUMP="patch"
+                fi
+              done <<< "$COMMITS"
+            fi
+          
+            # Fallback: если нет значимых коммитов — patch
+            if [ "$BUMP" = "none" ]; then
+              echo "::warning::No conventional commits (feat/fix/perf/refactor) found. Defaulting to patch bump."
+              BUMP="patch"
+            fi
+          
+            # Вычисляем новую версию
+            case $BUMP in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+          
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+            echo "bump=${BUMP}" >> $GITHUB_OUTPUT
+            echo "New auto-version: ${NEW_VERSION} (${BUMP})"
+          
+          # --- MANUAL: берём версию из имени ветки ---
+          else
+            echo "version=${{ needs.parse-branch.outputs.version }}" >> $GITHUB_OUTPUT
+            echo "bump=manual" >> $GITHUB_OUTPUT
+          fi
+          
+          # --- Генерируем changelog (для обоих режимов) ---
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "### Changes since ${LAST_TAG:-the beginning}" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          
+          if [ -z "$COMMITS" ]; then
+            echo "_No new commits found._" >> $GITHUB_OUTPUT
+          else
+            echo "$COMMITS" | while IFS= read -r line; do
+              # Показываем только conventional commits
+              if echo "$line" | grep -qE '^(feat|fix|perf|refactor|docs|chore|test|ci|build)(\([^)]+\))?!?:'; then
+                echo "- ${line}" >> $GITHUB_OUTPUT
+              fi
+            done
+          fi
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  # ============================================
+  # JOB 3: Сборка JAR + Docker build & push
+  # ============================================
+  build-and-push:
+    needs: [parse-branch, release-info]
+    # Запускаем если режим известен и release-info прошёл (для auto/manual) или это batch
+    if: |
+      always() && 
+      needs.parse-branch.outputs.mode != 'unknown' && 
+      (
+        needs.release-info.result == 'success' || 
+        needs.parse-branch.outputs.mode == 'batch'
+      )
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.parse-branch.outputs.services_json) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Determine release version
+        id: ver
+        run: |
+          # Для auto/manual берём из release-info, для batch — из parse-branch
+          VERSION="${{ needs.release-info.outputs.version || needs.parse-branch.outputs.version }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building ${{ matrix.service }} with version $VERSION"
+
+      - name: Build bootJar
+        run: |
+          ./gradlew :services:${{ matrix.service }}:bootJar \
+            -PreleaseVersion=${{ steps.ver.outputs.version }} \
+            -x test --no-daemon
+
+      - name: Build image locally for scan
+        run: |
+          docker build -t scan:${{ matrix.service }} \
+            -f ./services/${{ matrix.service }}/Dockerfile \
+            ./services/${{ matrix.service }}    
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'scan:${{ matrix.service }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'  # ← падаем при HIGH/CRITICAL в образе
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/${{ matrix.service }}
+          file: ./services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}:${{ steps.ver.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================
+  # JOB 4: Git tag + GitHub Release (не для batch)
+  # ============================================
+  create-release:
+    needs: [parse-branch, release-info, build-and-push]
+    if: needs.parse-branch.outputs.mode != 'batch' && needs.parse-branch.outputs.mode != 'unknown'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Git tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          TAG="${{ needs.parse-branch.outputs.service }}/v${{ needs.release-info.outputs.version }}"
+          git tag -a "$TAG" -m "Release ${{ needs.parse-branch.outputs.service }} ${{ needs.release-info.outputs.version }}"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.parse-branch.outputs.service }}/v${{ needs.release-info.outputs.version }}
+          name: "${{ needs.parse-branch.outputs.service }} v${{ needs.release-info.outputs.version }}"
+          body: |
+            Автоматический релиз сервиса `${{ needs.parse-branch.outputs.service }}`.
+            
+            **Версия:** `${{ needs.release-info.outputs.version }}`
+            **Режим:** `${{ needs.parse-branch.outputs.mode }}`
+            **Bump:** `${{ needs.release-info.outputs.bump }}`
+            
+            ### Docker
+            ```bash
+            docker pull ${{ secrets.DOCKER_USERNAME }}/${{ needs.parse-branch.outputs.service }}:${{ needs.release-info.outputs.version }}
+            ```
+            
+            ${{ needs.release-info.outputs.changelog }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
