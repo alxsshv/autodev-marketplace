@@ -77,7 +77,7 @@ dependencies {
     testRuntimeOnly(libs.bundles.junit.jupiter)
 
     // INTEGRATION TEST
-    integrationTestImplementation(project(":services:api-gateway"))
+    integrationTestImplementation(project(":services:platform-service"))
     integrationTestImplementation(libs.spring.boot.test)
     integrationTestImplementation(libs.spring.boot.security)
     integrationTestImplementation(libs.wiremock)

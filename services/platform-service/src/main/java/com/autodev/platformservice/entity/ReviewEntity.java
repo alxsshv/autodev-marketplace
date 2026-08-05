@@ -17,6 +17,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @Entity
 @Table(name = "reviews", schema = "platform")
+@SuppressWarnings("java:S2160")
 public class ReviewEntity extends AbstractBaseEntity {
 
     @Column(name = "product_id",

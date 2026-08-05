@@ -1,12 +1,11 @@
 package com.autodev.platformservice.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UuidGenerator;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -24,6 +23,7 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@Builder
 @Entity
 @Table(name = "outbox_events", schema = "platform")
 public class OutboxEntity {
@@ -59,6 +59,7 @@ public class OutboxEntity {
     @Column(name = "payload",
             columnDefinition = "jsonb",
             nullable = false)
+    @JdbcTypeCode(SqlTypes.JSON)
     private String payload;
 
     /** Временная метка создания события (автоматически устанавливается Hibernate) */
