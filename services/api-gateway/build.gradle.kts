@@ -7,7 +7,7 @@ plugins {
     id("io.spring.dependency-management")
 }
 
-
+version = project.findProperty("releaseVersion")?.toString() ?: "1.0.0-SNAPSHOT"
 
 
 sourceSets {

@@ -1,0 +1,11 @@
+.git
+.github
+.gitignore
+**/.gradle/
+**/build/
+**/out/
+**/.idea/
+**/*.iml
+**/*.md
+**/Dockerfile
+**/.env
