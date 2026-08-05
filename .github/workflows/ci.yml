@@ -226,33 +226,37 @@ jobs:
   # JOB 5: Агрегатор для Branch Protection
   # Имеет фиксированное имя "CI Passed" — его и будем требовать в Rules
   # ============================================
-  ci-passed:
+   ci-passed:
     name: CI Passed
-    needs: [ detect-changes, quality-and-unit-tests, security-scan ]
+    needs: [detect-changes, quality-and-unit-tests, security-scan]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Verify CI results
         run: |
-          echo "Detect changes: ${{ needs.detect-changes.result }}"
-          echo "Quality tests: ${{ needs.quality-and-unit-tests.result }}"
-          echo "Security scan: ${{ needs.security-scan.result }}"
-
-          # Если нет изменений в сервисах — matrix job'ы пропущены (skipped), это нормально
-          if [ "${{ needs.detect-changes.outputs.services }}" == "[]" ]; then
-            echo "No service changes detected. CI passed."
-            exit 0
+          DETECT="${{ needs.detect-changes.result }}"
+          QUALITY="${{ needs.quality-and-unit-tests.result }}"
+          SECURITY="${{ needs.security-scan.result }}"
+          
+          echo "detect-changes: $DETECT"
+          echo "quality-and-unit-tests: $QUALITY"
+          echo "security-scan: $SECURITY"
+          
+          # detect-changes должен отработать успешно всегда
+          if [ "$DETECT" != "success" ]; then
+            echo "::error::Job 'detect-changes' failed or was cancelled"
+            exit 1
           fi
-
-          # Иначе проверяем, что оба matrix job'а успешно завершились
-          if [ "${{ needs.quality-and-unit-tests.result }}" != "success" ]; then
+          
+          # quality и security: либо success (были изменения), либо skipped (не было изменений)
+          if [ "$QUALITY" != "success" ] && [ "$QUALITY" != "skipped" ]; then
             echo "::error::Quality and unit tests failed"
             exit 1
           fi
-
-          if [ "${{ needs.security-scan.result }}" != "success" ]; then
+          
+          if [ "$SECURITY" != "success" ] && [ "$SECURITY" != "skipped" ]; then
             echo "::error::Security scan failed"
             exit 1
           fi
-
+          
           echo "All required checks passed"
