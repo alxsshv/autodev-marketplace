@@ -226,7 +226,15 @@ jobs:
   # JOB 5: Агрегатор для Branch Protection
   # Имеет фиксированное имя "CI Passed" — его и будем требовать в Rules
   # ============================================
-   ci-passed:
+  ci-passed:
+    name: CI Passed
+    needs: [ detect-changes, quality-and-unit-tests, security-scan ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify CI results
+        run: |
+ci-passed:
     name: CI Passed
     needs: [detect-changes, quality-and-unit-tests, security-scan]
     if: always()
