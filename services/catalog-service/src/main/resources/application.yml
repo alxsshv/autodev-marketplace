@@ -1,0 +1,72 @@
+server:
+  port: ${CATALOG_SERVICE_PORT:8084}
+
+spring:
+  application:
+    name: catalog-service
+
+  datasource:
+    url: jdbc:postgresql://${CATALOG_DB_HOST:localhost}:${CATALOG_DB_PORT:5438}/${CATALOG_DB_NAME:services}
+    username: ${CATALOG_DB_USER:postgres}
+    password: ${CATALOG_DB_PASS:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    properties:
+      hibernate:
+        default_schema: catalog
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/master.yaml
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: catalog-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serrialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/autodev}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8090/realms/autodev/protocol/openid-connect/certs}
+
+  cloud:
+    consul:
+      discovery:
+        enabled: true
+        host: ${CONSUL_HOST:localhost}
+        port: ${CONSUL_PORT:8500}
+        discovery:
+          health-check-path: /actuator/health
+          health-check-interval: 10s
+          prefer-ip-address: true
+          register: true
+
+  management:
+    endpoints:
+      web:
+        exposure:
+          include: health,info, prometheus
+    endpoint:
+      health:
+        show-details: when_authorized
+
