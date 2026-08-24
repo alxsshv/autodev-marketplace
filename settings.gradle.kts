@@ -7,6 +7,7 @@ include("services:catalog-service")
 include("services:order-service")
 include("services:payment-service")
 include("services:communication-service")
+include("services:listing-service")
 include("services:notification-service")
 
 
