@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8081}
+  port: ${PLATFORM_SERVICE_PORT:8081}
 
 spring:
   application:
@@ -76,12 +76,4 @@ resilience4j:
         sliding-window-size: 10
         minimum-number-of-calls: 5
 
-keycloak:
-  admin:
-    server-url: http://${KEYCLOAK_URL:localhost}:${KEYCLOAK_PORT:8080}
-    realm: autodev
-    client-id: platform-service-client
-    client-secret: ${PLATFORM_SERVICE_CLIENT_SECRET}
-  client:
-    logging:
-      error-body-max-chars: 255
+
