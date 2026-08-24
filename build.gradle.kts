@@ -14,6 +14,10 @@ plugins {
 
 }
 
+repositories {
+    mavenCentral()
+}
+
 subprojects {
     apply(plugin = "java")
     apply(plugin = "org.springframework.boot")
