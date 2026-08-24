@@ -51,6 +51,13 @@ spring:
           filters:
             - RewritePath=/api/v1/(?<path>.*), /$\{path}
 
+        - id: listing-service
+          uri: lb://listing-service
+          predicates:
+            - Path=/api/v1/listings/**
+          filters:
+            - RewritePath=/api/v1/(?<path>.*), /$\{path}
+
         - id: order-service
           uri: lb://order-service
           predicates:
