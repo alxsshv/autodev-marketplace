@@ -235,14 +235,6 @@ jobs:
   # ============================================
   ci-passed:
     name: CI Passed
-    needs: [ detect-changes, quality-and-unit-tests, security-scan ]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify CI results
-        run: |
-ci-passed:
-    name: CI Passed
     needs: [detect-changes, quality-and-unit-tests, security-scan]
     if: always()
     runs-on: ubuntu-latest
@@ -252,26 +244,26 @@ ci-passed:
           DETECT="${{ needs.detect-changes.result }}"
           QUALITY="${{ needs.quality-and-unit-tests.result }}"
           SECURITY="${{ needs.security-scan.result }}"
-          
+
           echo "detect-changes: $DETECT"
           echo "quality-and-unit-tests: $QUALITY"
           echo "security-scan: $SECURITY"
-          
+
           # detect-changes должен отработать успешно всегда
           if [ "$DETECT" != "success" ]; then
             echo "::error::Job 'detect-changes' failed or was cancelled"
             exit 1
           fi
-          
+
           # quality и security: либо success (были изменения), либо skipped (не было изменений)
           if [ "$QUALITY" != "success" ] && [ "$QUALITY" != "skipped" ]; then
             echo "::error::Quality and unit tests failed"
             exit 1
           fi
-          
+
           if [ "$SECURITY" != "success" ] && [ "$SECURITY" != "skipped" ]; then
             echo "::error::Security scan failed"
             exit 1
           fi
-          
+
           echo "All required checks passed"
