@@ -222,6 +222,9 @@ jobs:
         needs.parse-branch.outputs.mode == 'batch'
       )
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     strategy:
       matrix:
         service: ${{ fromJSON(needs.parse-branch.outputs.services_json) }}
@@ -280,8 +283,8 @@ jobs:
           exit-code: '1'  # ← падаем при HIGH/CRITICAL в образе
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
