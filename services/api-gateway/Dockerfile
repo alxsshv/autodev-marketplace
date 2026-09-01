@@ -4,7 +4,7 @@ WORKDIR /application
 
 # Копируем СОБРАННЫЙ bootJar из CI (артефакт)
 # Убедитесь, что в CI сначала выполнена ./gradlew :service-a:bootJar
-COPY build/libs/*-boot.jar application.jar
+COPY services/api-gateway/build/libs/*-boot.jar application.jar
 RUN java -Djarmode=layertools -jar application.jar extract
 
 # === Этап 2: Runtime (только JRE) ===
