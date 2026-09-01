@@ -80,6 +80,13 @@ jobs:
               - 'settings.gradle.kts'
               - 'gradle/**'
               - 'gradlew'
+            listing-service:
+              - 'services/listing-service/**'
+              - 'services/shared-lib/**'
+              - 'build.gradle.kts'
+              - 'settings.gradle.kts'
+              - 'gradle/**'
+              - 'gradlew'
             # Добавьте остальные сервисы по аналогии
             # НЕ включайте сюда чисто библиотечные модули без Dockerfile
 

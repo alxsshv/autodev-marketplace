@@ -43,7 +43,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCKLOAK_ISSUER_URI:http://localhost:8090/realms/autodev}
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/autodev}
           jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8090/realms/autodev/protocol/openid-connect/certs}
 
   cloud:
